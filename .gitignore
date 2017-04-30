@@ -1,0 +1,6 @@
+/CONFIGURE
+*.vo
+*.glob
+*.aux
+/.depend
+/.loadpath
