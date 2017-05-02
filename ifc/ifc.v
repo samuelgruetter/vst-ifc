@@ -8,6 +8,7 @@ Require Export compcert.common.Values.
 Require Export compcert.common.Memory.
 Require Export veric.semax.
 Require Export floyd.base.
+Require Import List. Import ListNotations.
 
 Definition simplestate := (corestate * mem)%type.
 
@@ -33,12 +34,47 @@ Definition ifc_post := (ret_assert * stack_clsf * heap_clsf)%type.
 Parameter VST_pre_to_state_pred : pre_assert -> state_pred.
 Parameter VST_post_to_state_pred : ret_assert -> state_pred.
 
+Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=
+  | star_refl: forall s m,
+      star ge s m s m
+  | star_step: forall s1 m1 s2 m2 s3 m3,
+      cl_step ge s1 m1 s2 m2 ->
+      star ge s2 m2 s3 m3 ->
+      star ge s1 m1 s3 m3.
+
+(* general low-equivalence *)
+Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
+  forall (l: Loc), f1 l = Lo -> f2 l = Lo -> s1 l = s2 l.
+
+(* ExtCall not considered currently *)
+Definition stack_lo_equiv(s1 s2: corestate)(N1 N2: stack_clsf): Prop :=
+  match s1, s2 with
+  | (State e1 te1 c1), (State e2 te2 c2) =>
+     e1 = e2 /\ c1 = c2 /\ gen_lo_equiv N1 N2 (fun i => te1 ! i) (fun i => te2 ! i)
+  | _, _ => False
+  end.
+
+Definition heap_access(m: mem)(l: heap_loc): memval := 
+  let (b, i) := l in (ZMap.get i (PMap.get b (Mem.mem_contents m))).
+
+Definition heap_lo_equiv(m1 m2: mem)(A1 A2: heap_clsf): Prop :=
+  gen_lo_equiv A1 A2 (heap_access m1) (heap_access m2).
+
 Definition simple_ifc {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
   (postP: A -> state_pred) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
-:= forall (x1 x2: A) (c1 c2 : corestate) (m1 m2: mem),
-   preP x1 c1 m1 -> preP x2 c2 m2 -> True. (* TODO *)
+:= forall (x1 x2: A) (ge: genv) (e1 e2: env) (te1 te2: temp_env) (s1' s2': corestate)
+          (m1 m1' m2 m2': mem),
+   let s1 := (State e1 te1 [Kseq c]) in
+   let s2 := (State e2 te2 [Kseq c]) in
+   preP x1 s1 m1 ->
+   preP x2 s2 m2 ->
+   stack_lo_equiv s1 s2 (preN x1) (preN x2) ->
+   heap_lo_equiv  m1 m2 (preA x1) (preA x2) ->
+   star ge s1 m1 s1' m1' ->
+   star ge s2 m2 s2' m2' ->
+   stack_lo_equiv s1' s2' (postN x1) (postN x2) /\ heap_lo_equiv m1 m2 (postA x1) (postA x2).
 
 Definition ifc_core {A: Type} (Delta: tycontext) 
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
