@@ -27,7 +27,8 @@ COQDEP=$(COQBIN)coqdep $(DEPFLAGS)
 COQDOC=$(COQBIN)coqdoc
 
 %.vo: %.v
-	$(COQC) $(COQFLAGS) $*.v 
+	@echo COQC $*.v
+	@$(COQC) $(COQFLAGS) $*.v 
 
 .loadpath: Makefile
 	echo $(COQFLAGS) > .loadpath
