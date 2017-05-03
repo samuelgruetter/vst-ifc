@@ -86,23 +86,28 @@ Definition ifc_core {A: Type} (Delta: tycontext)
    let postP' := fun (x: A) => VST_post_to_state_pred (postP x) in
    simple_ifc Delta preP' preN preA c postP' postN postA.
 
-Definition ifc_def {A: Set} {cs: compspecs} {Espec: OracleKind} (Delta: tycontext) 
+Definition ifc_def {A: Type} {cs: compspecs} {Espec: OracleKind} (Delta: tycontext) 
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
   (postP: A -> ret_assert) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
 := (forall x: A, @semax cs Espec Delta (preP x) c (postP x)) /\
    (ifc_core Delta preP preN preA c postP postN postA).
 
-Notation "'ifc' '[' x : A ']'  'semax' Delta preP preN preA c postP postN postA" :=
-  (@ifc_def A _ _ Delta (fun x => preP) (fun x => preN) (fun x => preA)
-                        c
-                        (fun x => postP) (fun x => postN) (fun x => postA))
+Notation "'ifc' [ x1 : A1 ] Delta |-- preP preN preA c postP postN postA" :=
+  (@ifc_def A1 _ _ Delta (fun x => let x1 := x in preP)
+                         (fun x => let x1 := x in preN)
+                         (fun x => let x1 := x in preA)
+                         c
+                         (fun x => let x1 := x in postP)
+                         (fun x => let x1 := x in postN)
+                         (fun x => let x1 := x in postA))
   (at level 200,
-   x at level 0, Delta at level 0,
+   x1 at level 0, Delta at level 0,
    preP at level 0, preN at level 0, preA at level 0,
    c at level 0,
    postP at level 0, postN at level 0, postA at level 0).
 
+(*
 Parameter D1: tycontext.
 Parameter P1: pre_assert.
 Parameter Q1: ret_assert.
@@ -111,8 +116,9 @@ Definition A1: heap_clsf := fun l => let (b, ofs) := l in if Z.testbit ofs 0 the
 Require Import floyd.proofauto.
 Instance CompSpecs : compspecs. admit. Admitted.
 Instance Espec: OracleKind. Admitted.
-Definition t1 := ifc [ a : nat ] semax D1 P1 N1 A1 Sskip (fun _ => fun _ => !! (a = a)) N1 A1.
+Definition t1 := ifc [ a : nat ] D1 |-- P1 N1 A1 Sskip (fun _ => fun _ => !! (a = a)) N1 A1.
 Print t1.
+*)
 
 (* recursive binders only work for fun and forall, but not for match or let, so we have to write
    one definition for each arity *)
@@ -133,10 +139,12 @@ Notation "'ifc' '[' x1 : A1 , x2 : A2 ']'  'semax' Delta preP preN preA c postP 
  c at level 0,
  postP at level 0, postN at level 0, postA at level 0).
 
+(*
 Definition t2 := ifc [a : nat, b: nat] semax D1 P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b)) N1 A1.
 Print t2.
+*)
 
-Notation "'ifc' '[' x1 : A1 , x2 : A2 , x3 : A3 ']'  'semax' Delta preP preN preA c postP postN postA" :=
+Notation "'ifc' [ x1 : A1 , x2 : A2 , x3 : A3 ] Delta |-- preP preN preA c postP postN postA" :=
   (@ifc_def (A1*A2*A3) _ _ Delta
      (fun x => let (p2, x3) := x in let (x1,x2) := p2 in preP)
      (fun x => let (p2, x3) := x in let (x1,x2) := p2 in preN)
@@ -152,11 +160,13 @@ Notation "'ifc' '[' x1 : A1 , x2 : A2 , x3 : A3 ']'  'semax' Delta preP preN pre
  c at level 0,
  postP at level 0, postN at level 0, postA at level 0).
 
-Definition t3 := ifc [a : nat, b: nat, c: nat] semax
-   D1 P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b /\ b = c)) N1 A1.
+(*
+Definition t3 := ifc [a : nat, b: nat, c: nat] D1 |--
+   P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b /\ b = c)) N1 A1.
 Print t3.
+*)
 
-Notation "'ifc' '[' x1 : A1 , x2 : A2 , x3 : A3 , x4 : A4 ']'  'semax' Delta preP preN preA c postP postN postA" :=
+Notation "'ifc' [ x1 : A1 , x2 : A2 , x3 : A3 , x4 : A4 ] Delta |-- preP preN preA c postP postN postA" :=
   (@ifc_def (A1*A2*A3*A4) _ _ Delta
      (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in preP)
      (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in preN)
@@ -172,7 +182,8 @@ Notation "'ifc' '[' x1 : A1 , x2 : A2 , x3 : A3 , x4 : A4 ']'  'semax' Delta pre
  c at level 0,
  postP at level 0, postN at level 0, postA at level 0).
 
-Definition t4 := ifc [a : nat, b: nat, c: nat, d: int] semax
-   D1 P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b /\ b = c /\ d = Int.zero)) N1 A1.
+(*
+Definition t4 := ifc [a : nat, b: nat, c: nat, d: int] D1 |--
+   P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b /\ b = c /\ d = Int.zero)) N1 A1.
 Print t4.
-
+*)
