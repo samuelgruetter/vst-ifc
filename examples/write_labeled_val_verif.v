@@ -54,60 +54,28 @@ Proof.
   unfold body. apply ifc_ifthenelse; try reflexivity.
   - (* then-branch *)
 
+
 (* The ifc notation is not applicable here, and we have to do the following transformation: *)
-  cbv [iand iprop].
-assert (E: (fun x : int * int * val * val =>
-   (let (p3, lowptr) := x in
-    let (p2, highptr) := p3 in
-    let (v, b) := p2 in
-    PROP (b = Int.zero \/ b = Int.one)
-    LOCAL (temp _v (Vint v); temp _b (Vint b); temp _highptr highptr;
-    temp _lowptr lowptr)
-    SEP (data_at_ Ews tint highptr; data_at_ Ews tint lowptr)) &&
-   local
-     (` (typed_true (typeof (Etempvar write_labeled_val._b tbool)))
-        (eval_expr (Etempvar write_labeled_val._b tbool))))
-= (fun x : int * int * val * val =>
-   let (p3, lowptr) := x in
-    let (p2, highptr) := p3 in
-    let (v, b) := p2 in
-    ((PROP (b = Int.zero \/ b = Int.one)
-    LOCAL (temp _v (Vint v); temp _b (Vint b); temp _highptr highptr;
-    temp _lowptr lowptr)
-    SEP (data_at_ Ews tint highptr; data_at_ Ews tint lowptr)) &&
-   (local
-     (` (typed_true (typeof (Etempvar write_labeled_val._b tbool)))
-        (eval_expr (Etempvar write_labeled_val._b tbool))))))). {
-extensionality. destruct x as [[[x1 x2] x3] x4]. reflexivity.
-}
-match goal with
-| |- ?G => assert (E1: G = (ifc [v: int, b: int, highptr: val, lowptr: val] Delta |--
-   ((PROP (b = Int.zero \/ b = Int.one)
-  LOCAL (temp _v (Vint v); temp _b (Vint b); temp _highptr highptr;
-  temp _lowptr lowptr)
-  SEP (data_at_ Ews tint highptr; data_at_ Ews tint lowptr)) &&
- local
-   (` (typed_true (typeof (Etempvar write_labeled_val._b tbool)))
-      (eval_expr (Etempvar write_labeled_val._b tbool))))
-   (fun i => PMap.get i 
-      (PMap.set _v (if Int.eq b Int.zero then Lo else Hi)
-      (PMap.set _b Lo
-      (PMap.set _highptr Hi
-      (PMap.set _lowptr Lo
-      (PMap.init Hi))))))
-   (fun loc => Hi)
-   (Sassign (Ederef (Etempvar _highptr (tptr tint)) tint) (Etempvar _v tint))
-   (normal_ret_assert (
-    PROP (b = Int.zero \/ b = Int.one)
-    LOCAL (temp _v (Vint v); temp _b (Vint b); temp _highptr highptr; temp _lowptr lowptr)
-    SEP (data_at_ Ews tint highptr; data_at_ Ews tint lowptr)))
-   (fun i => Hi)
-   (fun loc => Hi)))
-end. {
-f_equal. apply E. }
-rewrite E1.
-clear E E1.
+  unfold iprop.
+  match goal with
+  | |- context [ iand ?P1 ?P2 ] => match P1 with
+    | (fun (x: ?A1 * ?A2 * ?A3 * ?A4) =>
+       let '(p3, x4) := x in let '(p2, x3) := _ in let '(x1, x2) := _ in ?bb1) => match P2 with
+       | (fun x' => ?bb2) => let r := constr:(fun (x': A1*A2*A3*A4) => 
+         let '(x1, x2, x3, x4) := x' in bb1 && bb2) in
+         assert (iand P1 P2 = r) as E by (
+           extensionality; destruct x0 as [[[x1 x2] x3] x4]; reflexivity
+         );
+         idtac
+      end
+    end
+  end.
+  rewrite E. clear E.
+
 (* Now finally the notation works again! 
+
+But note that the variable names were lost, they now have the default names x1, x2, x3, x4 instead
+of v, b, highptr, lowptr.
 
 The problem was that we had to turn
 

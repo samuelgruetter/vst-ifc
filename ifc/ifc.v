@@ -168,13 +168,13 @@ Print t3.
 
 Notation "'ifc' [ x1 : A1 , x2 : A2 , x3 : A3 , x4 : A4 ] Delta |-- preP preN preA c postP postN postA" :=
   (@ifc_def (A1*A2*A3*A4) _ _ Delta
-     (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in preP)
-     (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in preN)
-     (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in preA)
+     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in preP)
+     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in preN)
+     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in preA)
      c
-     (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in postP)
-     (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in postN)
-     (fun x => let (p3, x4) := x in let (p2, x3) := p3 in let (x1,x2) := p2 in postA))
+     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in postP)
+     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in postN)
+     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in postA))
 (at level 200,
  x1 at level 0, x2 at level 0, x3 at level 0, x4 at level 0,
  Delta at level 0,
