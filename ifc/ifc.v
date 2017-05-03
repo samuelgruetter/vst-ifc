@@ -8,7 +8,6 @@ Require Export compcert.common.Events.
 Require Export compcert.lib.Integers.
 Require Export compcert.common.Values.
 Require Export compcert.common.Memory.
-Require Export veric.semax.
 Require Export floyd.base.
 Require Import List. Import ListNotations.
 
@@ -93,16 +92,16 @@ Definition ifc_def {A: Type} {cs: compspecs} {Espec: OracleKind} (Delta: tyconte
 := (forall x: A, @semax cs Espec Delta (preP x) c (postP x)) /\
    (ifc_core Delta preP preN preA c postP postN postA).
 
-Notation "'ifc' [ x1 : A1 ] Delta |-- preP preN preA c postP postN postA" :=
-  (@ifc_def A1 _ _ Delta (fun x => let x1 := x in preP)
-                         (fun x => let x1 := x in preN)
-                         (fun x => let x1 := x in preA)
-                         c
-                         (fun x => let x1 := x in postP)
-                         (fun x => let x1 := x in postN)
-                         (fun x => let x1 := x in postA))
+Notation "'ifc' [ x : A ] Delta |-- preP preN preA c postP postN postA" :=
+  (@ifc_def A _ _ Delta (fun x => preP)
+                        (fun x => preN)
+                        (fun x => preA)
+                        c
+                        (fun x => postP)
+                        (fun x => postN)
+                        (fun x => postA))
   (at level 200,
-   x1 at level 0, Delta at level 0,
+   x at level 0, Delta at level 0,
    preP at level 0, preN at level 0, preA at level 0,
    c at level 0,
    postP at level 0, postN at level 0, postA at level 0).
@@ -118,72 +117,4 @@ Instance CompSpecs : compspecs. admit. Admitted.
 Instance Espec: OracleKind. Admitted.
 Definition t1 := ifc [ a : nat ] D1 |-- P1 N1 A1 Sskip (fun _ => fun _ => !! (a = a)) N1 A1.
 Print t1.
-*)
-
-(* recursive binders only work for fun and forall, but not for match or let, so we have to write
-   one definition for each arity *)
-
-Notation "'ifc' '[' x1 : A1 , x2 : A2 ']'  'semax' Delta preP preN preA c postP postN postA" :=
-  (@ifc_def (A1*A2) _ _ Delta
-     (fun x => let (x1,x2) := x in preP)
-     (fun x => let (x1,x2) := x in preN)
-     (fun x => let (x1,x2) := x in preA)
-     c
-     (fun x => let (x1,x2) := x in postP)
-     (fun x => let (x1,x2) := x in postN)
-     (fun x => let (x1,x2) := x in postA))
-(at level 200,
- x1 at level 0, x2 at level 0,
- Delta at level 0,
- preP at level 0, preN at level 0, preA at level 0,
- c at level 0,
- postP at level 0, postN at level 0, postA at level 0).
-
-(*
-Definition t2 := ifc [a : nat, b: nat] semax D1 P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b)) N1 A1.
-Print t2.
-*)
-
-Notation "'ifc' [ x1 : A1 , x2 : A2 , x3 : A3 ] Delta |-- preP preN preA c postP postN postA" :=
-  (@ifc_def (A1*A2*A3) _ _ Delta
-     (fun x => let (p2, x3) := x in let (x1,x2) := p2 in preP)
-     (fun x => let (p2, x3) := x in let (x1,x2) := p2 in preN)
-     (fun x => let (p2, x3) := x in let (x1,x2) := p2 in preA)
-     c
-     (fun x => let (p2, x3) := x in let (x1,x2) := p2 in postP)
-     (fun x => let (p2, x3) := x in let (x1,x2) := p2 in postN)
-     (fun x => let (p2, x3) := x in let (x1,x2) := p2 in postA))
-(at level 200,
- x1 at level 0, x2 at level 0, x3 at level 0,
- Delta at level 0,
- preP at level 0, preN at level 0, preA at level 0,
- c at level 0,
- postP at level 0, postN at level 0, postA at level 0).
-
-(*
-Definition t3 := ifc [a : nat, b: nat, c: nat] D1 |--
-   P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b /\ b = c)) N1 A1.
-Print t3.
-*)
-
-Notation "'ifc' [ x1 : A1 , x2 : A2 , x3 : A3 , x4 : A4 ] Delta |-- preP preN preA c postP postN postA" :=
-  (@ifc_def (A1*A2*A3*A4) _ _ Delta
-     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in preP)
-     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in preN)
-     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in preA)
-     c
-     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in postP)
-     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in postN)
-     (fun x => let '(p3, x4) := x in let '(p2, x3) := p3 in let '(x1,x2) := p2 in postA))
-(at level 200,
- x1 at level 0, x2 at level 0, x3 at level 0, x4 at level 0,
- Delta at level 0,
- preP at level 0, preN at level 0, preA at level 0,
- c at level 0,
- postP at level 0, postN at level 0, postA at level 0).
-
-(*
-Definition t4 := ifc [a : nat, b: nat, c: nat, d: int] D1 |--
-   P1 N1 A1 Sskip (fun _ => fun _ => !! (a = b /\ b = c /\ d = Int.zero)) N1 A1.
-Print t4.
 *)
