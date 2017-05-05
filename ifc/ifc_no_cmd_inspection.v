@@ -204,3 +204,11 @@ Definition ifc_body
   match spec with (mk_ifc_funspec (i, mk_funspec fsig cc T P P' Pne P'ne) N A N' A') =>
     ifc_body0 V G C f i fsig cc T P P' Pne P'ne N A N' A'
   end.
+
+(* TODO connect this to the actual VST soundness proof *)
+Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2,
+  semax Delta P1 c P2 ->
+  forall ge e1 te1 m1 n e2 te2 m2,
+  VST_pre_to_state_pred P1 e1 te1 m1 ->
+  star ge (State e1 te1 (Kseq c :: nil)) m1 n (State e2 te2 nil) m2 ->
+  VST_post_to_state_pred P2 e2 te2 m2.
