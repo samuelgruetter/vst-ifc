@@ -34,6 +34,10 @@ Definition ifc_post(A: Type) := ((A -> ret_assert) * (A -> stack_clsf) * (A -> h
 Parameter VST_pre_to_state_pred : pre_assert -> state_pred.
 Parameter VST_post_to_state_pred : ret_assert -> state_pred.
 
+(* TODO does not hold if exitkind is different from EK_normal *)
+Axiom VST_overridePost_to_state_pred: forall Q R,
+  VST_post_to_state_pred (overridePost Q R) = VST_pre_to_state_pred Q.
+
 Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=
   | star_refl: forall s m,
       star ge s m s m

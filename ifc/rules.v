@@ -21,6 +21,24 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
+Lemma star_seq_inv: forall ge e1 te1 e3 te3 h t m1 m3,
+  star ge (State e1 te1 (Kseq (Ssequence h t) :: nil)) m1 (State e3 te3 nil) m3 ->
+  exists e2 te2 m2, star ge (State e1 te1 (Kseq h :: nil)) m1 (State e2 te2 nil) m2
+                 /\ star ge (State e2 te2 (Kseq t :: nil)) m2 (State e3 te3 nil) m3.
+Proof.
+  intros. inverts H as Step Star. inverts Step as Step.
+  pose proof (star_step _ _ _ _ _ _ _ Step Star) as H. clear Star Step s2 m2.
+  remember (State e1 te1 (Kseq h :: Kseq t :: nil)) as s1.
+  remember (State e3 te3 nil) as s3.
+  gen Heqs1 Heqs3.
+  gen e1 te1 e3 te3 h t.
+  induction H.
+  - (* star_refl: contradiction *)
+    intros. rewrite Heqs1 in Heqs3. discriminate.
+  - (* star_step *)
+    intros. (* this IH is not strong enough... *)
+Admitted.
+
 (* We need lifting on top of VST's lifting... *)
 
 Definition iand{A: Type}(P1: A -> pre_assert)(P2: A -> pre_assert): A -> pre_assert :=
@@ -42,28 +60,28 @@ Proof.
   introv H1 H2. split_ifc_hyps. split.
   - intro. apply* semax_seq.
   - unfold ifc_core, simple_ifc in *.
-    intros x x' ge e1 e1' te1 te1' s3 s3' m1 m3 m1' m3' n.
+    intros x x' ge e1 e1' e3 e3' te1 te1' te3 te3' m1 m1' m3 m3'.
     intros Sat1 Sat1' SE1 HE1 Star1 Star1'.
-    destruct n as [|n].
-    + (* 0 steps *)
-      inversion Star1. subst s s3 m m3.
-      inversion Star1'. subst s s3' m m3'.
-      specialize (H1i x x' ge e1 e1' te1 te1').
-      specialize (H1i (State e1 te1 (Kseq h :: nil)) (State e1' te1' (Kseq h :: nil))).
-(*
-      specialize (H1i m1 m1 m1' m1' 0 Sat1 Sat1').
-      specialize (H1i (stack_lo_equiv_change_cmd _ _ _ _ _ _ _ _ _ _ SE1) HE1).
-      specialize (H1i (star_refl _ _ _) (star_refl _ _ _)).
-      destruct H1i as [SE2 HE2].
-      specialize (H2i x x' ge e1 e1' te1 te1').
-      specialize (H2i (State e1 te1 (Kseq h :: nil)) (State e1' te1' (Kseq h :: nil))).
-*)
-
-(* star does not mean "execute until done", so execution can be anywhere inside h or t,
-   which seems difficult to reason about!
-   TODO first just define exec to go until empty cont list *)
-
-Admitted.
+    apply star_seq_inv in Star1. destruct Star1 as [e2 [te2 [m2 [Star1 Star2]]]].
+    apply star_seq_inv in Star1'. destruct Star1' as [e2' [te2' [m2' [Star1' Star2']]]].
+    edestruct H1i as [SE2 HE2].
+    + eapply Sat1.
+    + eapply Sat1'.
+    + apply* stack_lo_equiv_change_cmd.
+    + exact HE1.
+    + exact Star1.
+    + exact Star1'.
+    + clear H1i. eapply H2i.
+      * pose proof (VST_sound _ _ _ _ (H1s x)) as C. unfold ioverridePost in C.
+        erewrite <- VST_overridePost_to_state_pred. apply* C.
+      * pose proof (VST_sound _ _ _ _ (H1s x')) as C. unfold ioverridePost in C.
+        erewrite <- VST_overridePost_to_state_pred. apply* C.
+      * apply* stack_lo_equiv_change_cmd.
+      * exact HE2.
+      * exact Star2.
+      * exact Star2'.
+Grab Existential Variables. exact nil. exact nil. exact nil. exact nil.
+Qed.
 
 Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext) 
   (P: T -> pre_assert) (N: T -> stack_clsf) (A: T -> heap_clsf)
