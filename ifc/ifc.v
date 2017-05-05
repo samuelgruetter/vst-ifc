@@ -22,7 +22,7 @@ Definition heap_clsf := heap_loc -> label.
 
 (* TODO this should match VST, i.e. we should have "state_pred = environ->mpred" for preconditions,
    and for postconditions, it's ret_assert in VST *)
-Definition state_pred := corestate -> mem -> Prop.
+Definition state_pred := env -> temp_env -> mem -> Prop.
 
 Definition pre_assert := environ -> mpred.
 (* "ret_assert := exitkind -> option val -> environ -> mpred" is already defined by VST *)
@@ -50,9 +50,16 @@ Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
 Definition stack_lo_equiv(s1 s2: corestate)(N1 N2: stack_clsf): Prop :=
   match s1, s2 with
   | (State e1 te1 c1), (State e2 te2 c2) =>
-     e1 = e2 /\ c1 = c2 /\ gen_lo_equiv N1 N2 (fun i => te1 ! i) (fun i => te2 ! i)
+     e1 = e2 /\ gen_lo_equiv N1 N2 (fun i => te1 ! i) (fun i => te2 ! i)
   | _, _ => False
   end.
+
+Lemma stack_lo_equiv_change_cmd: forall e1 te1 c1 e2 te2 c2 c1' c2' N1 N2,
+  stack_lo_equiv (State e1 te1 c1 ) (State e2 te2 c2 ) N1 N2 ->
+  stack_lo_equiv (State e1 te1 c1') (State e2 te2 c2') N1 N2.
+Proof.
+  intros. unfold stack_lo_equiv in *. assumption.
+Qed.
 
 Definition heap_access(m: mem)(l: heap_loc): memval :=
   let (b, i) := l in (ZMap.get i (PMap.get b (Mem.mem_contents m))).
@@ -66,12 +73,12 @@ Definition simple_ifc {A : Type} (Delta: tycontext)
   (postP: A -> state_pred) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
 := forall (x x': A) (ge: genv) (e1 e1' e2 e2': env) (te1 te1' te2 te2': temp_env)
           (m1 m1' m2 m2': mem),
+   preP x  e1 te1 m1 ->
+   preP x' e1' te1' m1' ->
    let s1  := (State e1  te1  [Kseq c]) in
    let s1' := (State e1' te1' [Kseq c]) in
    let s2  := (State e2  te2  nil) in
    let s2' := (State e2' te2' nil) in
-   preP x  s1  m1 ->
-   preP x' s1' m1' ->
    stack_lo_equiv s1 s1' (preN x) (preN x') ->
    heap_lo_equiv m1 m1' (preA x) (preA x') ->
    star ge s1  m1  s2  m2 ->
@@ -199,3 +206,11 @@ Definition ifc_body
   match spec with (mk_ifc_funspec (i, mk_funspec fsig cc T P P' Pne P'ne) N A N' A') =>
     ifc_body0 V G C f i fsig cc T P P' Pne P'ne N A N' A'
   end.
+
+(* TODO connect this to the actual VST soundness proof *)
+Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2,
+  semax Delta P1 c P2 ->
+  forall ge e1 te1 m1 e2 te2 m2,
+  VST_pre_to_state_pred P1 e1 te1 m1 ->
+  star ge (State e1 te1 [Kseq c]) m1 (State e2 te2 nil) m2 ->
+  VST_post_to_state_pred P2 e2 te2 m2.
