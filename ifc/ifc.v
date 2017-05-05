@@ -2,7 +2,6 @@
 
 Require Export compcert.cfrontend.Clight.
 Require Export veric.Clight_new.
-Require Export examples.if1.
 Require Export compcert.lib.Maps. (* for PMap and ZMap *)
 Require Export compcert.common.Events.
 Require Export compcert.lib.Integers.
@@ -35,13 +34,13 @@ Definition ifc_post(A: Type) := ((A -> ret_assert) * (A -> stack_clsf) * (A -> h
 Parameter VST_pre_to_state_pred : pre_assert -> state_pred.
 Parameter VST_post_to_state_pred : ret_assert -> state_pred.
 
-Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=
+Inductive star (ge: genv): corestate -> mem -> nat -> corestate -> mem -> Prop :=
   | star_refl: forall s m,
-      star ge s m s m
-  | star_step: forall s1 m1 s2 m2 s3 m3,
+      star ge s m O s m
+  | star_step: forall n s1 m1 s2 m2 s3 m3,
       cl_step ge s1 m1 s2 m2 ->
-      star ge s2 m2 s3 m3 ->
-      star ge s1 m1 s3 m3.
+      star ge s2 m2 n s3 m3 ->
+      star ge s1 m1 (S n) s3 m3.
 
 (* general low-equivalence *)
 Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
@@ -66,15 +65,15 @@ Definition simple_ifc {A : Type} (Delta: tycontext)
   (c: statement)
   (postP: A -> state_pred) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
 := forall (x1 x2: A) (ge: genv) (e1 e2: env) (te1 te2: temp_env) (s1' s2': corestate)
-          (m1 m1' m2 m2': mem),
+          (m1 m1' m2 m2': mem) (n: nat),
    let s1 := (State e1 te1 [Kseq c]) in
    let s2 := (State e2 te2 [Kseq c]) in
    preP x1 s1 m1 ->
    preP x2 s2 m2 ->
    stack_lo_equiv s1 s2 (preN x1) (preN x2) ->
    heap_lo_equiv  m1 m2 (preA x1) (preA x2) ->
-   star ge s1 m1 s1' m1' ->
-   star ge s2 m2 s2' m2' ->
+   star ge s1 m1 n s1' m1' ->
+   star ge s2 m2 n s2' m2' ->
    stack_lo_equiv s1' s2' (postN x1) (postN x2) /\ heap_lo_equiv m1 m2 (postA x1) (postA x2).
 
 Definition ifc_core {A: Type} (Delta: tycontext)
