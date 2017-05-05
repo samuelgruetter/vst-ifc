@@ -16,7 +16,7 @@ EXTFLAGS = -R $(COMPCERT) compcert
 
 VSTSUBDIRS=msl sepcomp veric floyd
 
-DIRS = ifc examples
+DIRS = lib ifc examples
 
 COQFLAGS=$(foreach d, $(VSTSUBDIRS), -Q $(VSTDIR)/$(d) $(d)) $(foreach d, $(DIRS), -Q $(d) $(d)) $(EXTFLAGS)
 DEPFLAGS:=$(COQFLAGS)
