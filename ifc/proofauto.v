@@ -84,6 +84,8 @@ Ltac istart_function :=
  hnf;
  intros; clear;
  simpl fn_body; simpl fn_return;
+ (* simplifies complex implicit arg of sepcon to mpred *)
+ simpl functors.MixVariantFunctor._functor in *;
  isimplify_func_tycontext;
  iprocess_stackframe_of.
 
@@ -97,7 +99,6 @@ Ltac istart_function :=
    end;
    (*simpl fn_body; (*done*)*) simpl fn_params (*; simpl fn_return (*done*)*)
  end;
- simpl functors.MixVariantFunctor._functor in *;
  simpl rmaps.dependent_type_functor_rec;
  clear DependedTypeList;
  repeat match goal with |- @semax _ _ _ (match ?p with (a,b) => _ end * _) _ _ =>
