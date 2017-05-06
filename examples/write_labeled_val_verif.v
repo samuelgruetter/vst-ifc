@@ -18,7 +18,7 @@ Check (mkMyMetaVars Int.zero Int.zero Vundef Vundef).
 Record MyMetaVars: Type := { v: int; b: int; highptr: val; lowptr: val }.
 (* Check {| v := Int.zero; b := Int.zero; highptr := Vundef; lowptr := Vundef |}. *)
 
-Set Printing Projections. (* to get x.(b) instead of (b x) in output *)
+(*Set Printing Projections. (* to get x.(b) instead of (b x) in output *)*)
 
 Definition write_labeled_val_spec: ifc_funspec := {|
   functional_spec :=
@@ -64,6 +64,32 @@ Lemma verif_write_labeled_val:
   ifc_body Vprog Gprog f_write_labeled_val write_labeled_val_spec.
 Proof.
   istart_function.
+
+  (* setoid_rewrite <- lower_sepcon. setoid_rewrite instead of just rewrite is supposed to work under
+     binders, but it takes forever *)
+  match goal with
+  | |- ifc_def _ (fun (x: ?T) (rho: ?E) => sepcon (?A ?R) (?B ?R)) _ _ _ _ _ _ =>
+       replace (fun (x: T) (rho: E) => sepcon (A R) (B R))
+          with (fun (x: T) (rho: E) => (sepcon A B) R)
+            by (do 2 extensionality; apply lower_sepcon)
+  end.
+
+  match goal with
+  | |- ifc_def _ (fun (x: ?T) (rho: ?E) => ?A rho) _ _ _ _ _ _ =>
+       (* note: we also have to include mention x, because A depends on x *)
+       replace (fun (x: T) (rho: E) => A rho)
+          with (fun (x: T) => A)
+            by (extensionality; reflexivity)
+  end.
+
+  match goal with
+  | |- ifc_def _ (fun (x: ?T) => ?A * emp) _ _ _ _ _ _ =>
+       (* note: we also have to include mention x, because A depends on x *)
+       replace (fun (x: T) => A * emp)
+          with (fun (x: T) => A)
+            by (extensionality; symmetry; apply sepcon_emp)
+  end.
+
   eapply ifc_seq'.
   {
   apply ifc_ifthenelse; try reflexivity; unfold iand, iprop.
@@ -74,6 +100,7 @@ Proof.
       match goal with
       | _ : x = ?m |- _ => simpl (_ m)
       end. clear E.
+      unfold inormal_ret_assert. abbreviate_semax.
       (* forward. still fails *)
       admit.
     + (* IFC part *)
