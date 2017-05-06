@@ -1,16 +1,10 @@
-Require Import ifc.rules.
-Require Import ifc.ifc.
-Require Import floyd.proofauto.
+Require Import ifc.proofauto.
 Require Import examples.write_labeled_val.
 
 Instance CompSpecs : compspecs. make_compspecs prog. Defined.
 Definition Vprog : varspecs.  mk_varspecs prog. Defined.
 
 Definition body: statement := ltac:(let r := eval simpl in f_write_labeled_val.(fn_body) in exact r).
-
-Parameter Delta: tycontext.
-
-Instance Espec: OracleKind. Admitted.
 
 Axiom ifc_core0_always_holds: forall {T: Type} Delta P N A c P' N' A',
   @ifc_core T Delta P N A c P' N' A'.
@@ -59,23 +53,19 @@ Definition write_labeled_val_spec: ifc_funspec := {|
 
 Definition Gprog: funspecs := [].
 
+Lemma verif_write_labeled_val_VST:
+  semax_body Vprog Gprog f_write_labeled_val write_labeled_val_spec.(functional_spec).
+Proof.
+  start_function.
+  unfold POSTCONDITION, abbreviate.
+Abort.
+
 Lemma verif_write_labeled_val:
   ifc_body Vprog Gprog f_write_labeled_val write_labeled_val_spec.
 Proof.
-  unfold write_labeled_val_spec. hnf. intros. clear ts.
-  simpl (fn_body _).
-  (* TODO rule for Ssequence *)
-  replace (Ssequence
-   (Sifthenelse (Etempvar _b tbool)
-      (Sassign (Ederef (Etempvar _highptr (tptr tint)) tint)
-         (Etempvar _v tint))
-      (Sassign (Ederef (Etempvar _lowptr (tptr tint)) tint)
-         (Etempvar _v tint))) (Sreturn None))
-  with (Sifthenelse (Etempvar _b tbool)
-      (Sassign (Ederef (Etempvar _highptr (tptr tint)) tint)
-         (Etempvar _v tint))
-      (Sassign (Ederef (Etempvar _lowptr (tptr tint)) tint)
-         (Etempvar _v tint))) by admit.
+  istart_function.
+  eapply ifc_seq'.
+  {
   apply ifc_ifthenelse; try reflexivity; unfold iand, iprop.
   - (* then-branch *)
     unfold ifc_def. split.
@@ -84,14 +74,23 @@ Proof.
       match goal with
       | _ : x = ?m |- _ => simpl (_ m)
       end. clear E.
-      simplify_func_tycontext. abbreviate_semax.
       (* forward. still fails *)
       admit.
     + (* IFC part *)
       apply ifc_core0_always_holds.
   - (* else-branch *)
     admit.
+  } {
+  unfold ifc_def. split.
+  + (* VST part *)
+    intros. (* forward. runs forever *)
+    admit.
+  + (* IFC part *)
+    admit.
 Admitted.
+
+Parameter Delta: tycontext.
+Instance Espec: OracleKind. Admitted.
 
 Lemma verif_write_labeled_val_body_only:
   ifc [x: MyMetaVars] Delta |--
