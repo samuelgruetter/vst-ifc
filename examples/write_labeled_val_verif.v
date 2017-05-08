@@ -1,3 +1,4 @@
+Require Import ifc.simple_vst_store_lemmas.
 Require Import ifc.proofauto.
 Require Import examples.write_labeled_val.
 
@@ -129,9 +130,15 @@ Proof.
     + (* VST part *)
       start_VST.
       Intros. clear H0. subst b0.
-      (* NOTE: this is the unmodified "forward" of VST! *)
-      forward.
-      entailer!.
+      (* test: apply a simpler store lemma, semax_SC_field_store_without_paths, manually *)
+      rewrite -> semax_seq_skip.
+      eapply semax_seq'. {
+        hoist_later_in_pre.
+        eapply semax_SC_field_store_without_paths with (n := 1%nat);
+          auto; try reflexivity; auto; entailer!.
+      }
+      fwd_result. fwd_skip. entailer!.
+      (* end of test, and it was only 7 lines *)
     + (* IFC part *)
       apply ifc_core0_always_holds.
   } {
