@@ -1,4 +1,5 @@
 Require Export ifc.rules.
+Require Export ifc.proofauto_lemmas.
 Require Export ifc.ifc.
 Require Export floyd.proofauto.
 
