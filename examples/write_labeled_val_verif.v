@@ -18,7 +18,7 @@ Check (mkMyMetaVars Int.zero Int.zero Vundef Vundef).
 Record MyMetaVars: Type := { v: int; b: int; highptr: val; lowptr: val }.
 (* Check {| v := Int.zero; b := Int.zero; highptr := Vundef; lowptr := Vundef |}. *)
 
-(*Set Printing Projections. (* to get x.(b) instead of (b x) in output *)*)
+Set Printing Projections. (* to get x.(b) instead of (b x) in output *)
 
 Definition write_labeled_val_spec: ifc_funspec := {|
   functional_spec :=
@@ -31,11 +31,10 @@ Definition write_labeled_val_spec: ifc_funspec := {|
       )
       SEP (data_at_ Ews tint x.(highptr); data_at_ Ews tint x.(lowptr)))
     POST [ tvoid ]
-      (PROP (x.(b) = Int.zero \/ x.(b) = Int.one)
-       LOCAL (
-         temp _v (Vint x.(v)); temp _b (Vint x.(b)); temp _highptr x.(highptr); temp _lowptr x.(lowptr)
-       )
-       SEP (data_at_ Ews tint x.(highptr); data_at_ Ews tint x.(lowptr)));
+      (PROP () LOCAL () SEP (
+         data_at Ews tint (if Int.eq x.(b) Int.zero then Vundef else Vint x.(v)) x.(highptr);
+         data_at Ews tint (if Int.eq x.(b) Int.zero then Vint x.(v) else Vundef) x.(lowptr)
+       ));
   ifc_stack_pre :=
     (fun (x: MyMetaVars) (i: ident) => PMap.get i 
       (PMap.set _v (if Int.eq x.(b) Int.zero then Lo else Hi)
@@ -90,70 +89,56 @@ Proof.
             by (extensionality; symmetry; apply sepcon_emp)
   end.
 
-  eapply ifc_seq'.
+  eapply ifc_seq' with
+    (P2 := fun x => (PROP (x.(b) = Int.zero \/ x.(b) = Int.one)
+     LOCAL (temp _v (Vint x.(v)); temp _b (Vint x.(b));
+     temp _highptr x.(highptr); temp _lowptr x.(lowptr))
+     SEP (
+       (* "interesting" join condition to be provided manually: *)
+       data_at Ews tint (if Int.eq x.(b) Int.zero then Vundef else Vint x.(v)) x.(highptr);
+       data_at Ews tint (if Int.eq x.(b) Int.zero then Vint x.(v) else Vundef) x.(lowptr))
+     ))
+    (N2 := fun x => (fun i : ident =>
+            (PMap.set _v (if Int.eq x.(b) Int.zero then Lo else Hi)
+            (PMap.set _b Lo
+            (PMap.set _highptr Hi (PMap.set _lowptr Lo (PMap.init Hi))))) !! i))
+    (A2 := fun x => (fun _ : heap_loc => Hi)).
   {
-  apply ifc_ifthenelse; try reflexivity; unfold iand, iprop.
+  (* Note: even though the precondition is not explicitly written in the form
+     "fun x: MyMetaVars => PROP (P x) LOCAL (Q x) SEP (R x)", where P, Q, R are functions, but
+     rather in the form "fun x: MyMetaVars => PROP P LOCAL Q SEP R", where P, Q, R are terms in which
+     x is a free variable, we still can apply ifc_ifthenelse_PQR, which expects a goal in the first
+     form, because Coq's unification algorithm is strong enough to match this. *)
+  eapply ifc_ifthenelse_PQR; try reflexivity; unfold iand, iprop.
+  - (* typechecking the condition *)
+    intro. entailer!.
+  - (* evaluating the condition *)
+    intro. entailer. (* NOTE floyd: entailer! produces a false goal here, so we have to use entailer *)
   - (* then-branch *)
     unfold ifc_def. split.
     + (* VST part *)
-      intros. destruct x as [v b highptr lowptr] eqn: E.
-      match goal with
-      | _ : x = ?m |- _ => simpl (_ m)
-      end. clear E.
-      unfold inormal_ret_assert. abbreviate_semax.
-      (* forward. still fails *)
-      admit.
+      start_VST.
+      Intros. destruct H0; try contradiction. subst b0.
+      (* NOTE: this is the unmodified "forward" of VST! *)
+      forward.
+      entailer!.
     + (* IFC part *)
       apply ifc_core0_always_holds.
   - (* else-branch *)
-    admit.
+    unfold ifc_def. split.
+    + (* VST part *)
+      start_VST.
+      Intros. clear H0. subst b0.
+      (* NOTE: this is the unmodified "forward" of VST! *)
+      forward.
+      entailer!.
+    + (* IFC part *)
+      apply ifc_core0_always_holds.
   } {
   unfold ifc_def. split.
   + (* VST part *)
-    intros. (* forward. runs forever *)
-    admit.
+    intros. forward.
   + (* IFC part *)
-    admit.
-Admitted.
-
-Parameter Delta: tycontext.
-Instance Espec: OracleKind. Admitted.
-
-Lemma verif_write_labeled_val_body_only:
-  ifc [x: MyMetaVars] Delta |--
-   (PROP (x.(b) = Int.zero \/ x.(b) = Int.one)
-    LOCAL (
-      temp _v (Vint x.(v)); temp _b (Vint x.(b)); temp _highptr x.(highptr); temp _lowptr x.(lowptr)
-    )
-    SEP (data_at_ Ews tint x.(highptr); data_at_ Ews tint x.(lowptr)))
-   (fun i => PMap.get i 
-      (PMap.set _v (if Int.eq x.(b) Int.zero then Lo else Hi)
-      (PMap.set _b Lo
-      (PMap.set _highptr Hi
-      (PMap.set _lowptr Lo
-      (PMap.init Hi))))))
-   (fun loc => Hi)
-   body
-   (normal_ret_assert (
-    PROP (x.(b) = Int.zero \/ x.(b) = Int.one)
-    LOCAL (
-      temp _v (Vint x.(v)); temp _b (Vint x.(b)); temp _highptr x.(highptr); temp _lowptr x.(lowptr)
-    )
-    SEP (data_at_ Ews tint x.(highptr); data_at_ Ews tint x.(lowptr))))
-   (fun i => Hi)
-   (fun loc => Hi).
-Proof.
-  unfold body. apply ifc_ifthenelse; try reflexivity; unfold iand, iprop.
-  - (* then-branch *)
-    unfold ifc_def. split.
-    + (* VST part *)
-      intros. destruct x as [v b highptr lowptr] eqn: E.
-      match goal with
-      | _ : x = ?m |- _ => simpl (_ m)
-      end. clear E.
-      admit.
-    + (* IFC part *)
-      apply ifc_core0_always_holds.
-  - (* else-branch *)
-    admit.
-Admitted.
+    apply ifc_core0_always_holds.
+  }
+Qed.

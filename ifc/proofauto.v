@@ -13,6 +13,20 @@ intros.
 rewrite sepcon_comm. rewrite insert_SEP. apply H.
 Qed.
 
+Ltac start_VST :=
+  lazymatch goal with
+  | |- forall y, semax _ _ _ _ =>
+         unfold inormal_ret_assert;
+         let x := fresh "x00" in let E := fresh "E00" in 
+         intro x; destruct x eqn: E;
+         match type of E with
+         | x = ?m => simpl (_ m)
+         end;
+         clear x E;
+         abbreviate_semax
+  | _ => fail "Expected goal of form (forall x, semax _ _ _ _)"
+  end.
+
 (* This tactic is carefully tuned to avoid proof blowups,
   both in execution and in Qed *)
 Ltac isimplify_func_tycontext :=

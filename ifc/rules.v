@@ -6,6 +6,7 @@ Require Import compcert.common.Values.
 Require Import compcert.common.Memory.
 Require Import floyd.base.
 Require Import floyd.canon.
+Require Import floyd.forward_lemmas.
 Require Import ifc.ifc.
 Require Import lib.LibTactics.
 
@@ -95,6 +96,14 @@ Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext)
   ifc_def Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
   ifc_def Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
   ifc_def Delta P N A (Sifthenelse b c1 c2) P' N' A'.
+Proof.
+  introv Eq B1 B2.
+  split_ifc_hyps. split.
+  - (* VST part *)
+    intro x. admit.
+  - unfold ifc_core in *. unfold simple_ifc in *.
+    introv Sat Sat' SE1 HE1 Star Star'.
+    (* how to express and use restriction that b must not depend on Hi data? *)
 Admitted.
 
 End RULES.
