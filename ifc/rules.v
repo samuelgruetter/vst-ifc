@@ -7,6 +7,8 @@ Require Import compcert.common.Memory.
 Require Import floyd.base.
 Require Import floyd.canon.
 Require Import floyd.forward_lemmas.
+Require Import floyd.reptype_lemmas.
+Require Import floyd.field_at.
 Require Import ifc.ifc.
 Require Import lib.LibTactics.
 
@@ -105,5 +107,86 @@ Proof.
     introv Sat Sat' SE1 HE1 Star Star'.
     (* how to express and use restriction that b must not depend on Hi data? *)
 Admitted.
+
+Definition upd_stack_clsf(N: stack_clsf)(i: ident)(l: label): stack_clsf :=
+  fun i0 => if Pos.eqb i0 i then l else N i0.
+
+Definition heap_loc_eqb(l1 l2: heap_loc): bool := match l1, l2 with
+  | (b1, ofs1), (b2, ofs2) => Pos.eqb b1 b2 && Z.eqb ofs1 ofs2
+end.
+
+Definition upd_heap_clsf(A: heap_clsf)(loc: heap_loc)(l: label): heap_clsf :=
+  fun loc0 => if heap_loc_eqb loc0 loc then l else A loc0.
+
+Definition val_eq_heap_loc(v: val)(l: heap_loc): Prop := match v, l with
+| Vptr b1 ofs1, (b2, ofs2) => b1 = b2 /\ ofs1 = Int.repr ofs2
+| _, _ => False
+end.
+
+Lemma ifc_store{T: Type}:
+    forall Delta sh n (p: T -> val) P Q R (e1 e2 : expr)
+      (t: type) (v0: T -> val) (v v_new: T -> reptype t)
+      (hl: T -> heap_loc) (l1 l2: T -> label) (N: T -> stack_clsf) (A: T -> heap_clsf),
+      (* VST preconditions: *)
+      typeof e1 = t ->
+      type_is_by_value t = true ->
+      type_is_volatile t = false ->
+      (forall x, nth_error (R x) n = Some (data_at sh t (v x) (p x))) ->
+      (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+                 local (`(eq (p x)) (eval_lvalue e1))) ->
+      (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+                 local (`(eq (v0 x)) (eval_expr (Ecast e2 t)))) ->
+      (forall x, JMeq (v0 x) (v_new x)) ->
+      writable_share sh ->
+      (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+         (tc_lvalue Delta e1) && 
+         (tc_expr Delta (Ecast e2 t))) ->
+      (* IFC preconditions: *)
+      (forall x, val_eq_heap_loc (p x) (hl x)) ->
+      (forall x, clsf_expr (N x) true e1 = Some (l1 x)) ->
+      (forall x, clsf_expr (N x) false e2 = Some (l2 x)) ->
+      ifc [x: T] Delta |--
+        (|>PROPx (P x) (LOCALx (Q x) (SEPx (R x))))
+        (N x)
+        (A x)
+        (Sassign e1 e2)
+        (normal_ret_assert (PROPx (P x)
+                           (LOCALx (Q x)
+                           (SEPx (replace_nth n (R x) (data_at sh t (v_new x) (p x)))))))
+        (N x)
+        (upd_heap_clsf (A x) (hl x) (max_clsf (l1 x) (l2 x))).
+Proof.
+Admitted.
+
+(* Old version: P, Q, R cannot depend on x!! *)
+Lemma ifc_store_bad_version{T: Type}:
+    forall Delta sh n (p: val) P Q R (e1 e2 : expr)
+      (t: type) (v0: val) (v v_new: reptype t)
+      (hl: heap_loc) (l1 l2: T -> label) (N: T -> stack_clsf) (A: T -> heap_clsf),
+      (* VST preconditions: *)
+      typeof e1 = t ->
+      type_is_by_value t = true ->
+      type_is_volatile t = false ->
+      nth_error R n = Some (data_at sh t v p) ->
+      ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |-- local (`(eq p) (eval_lvalue e1)) ->
+      ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |-- local (`(eq v0) (eval_expr (Ecast e2 t))) ->
+      JMeq v0 v_new ->
+      writable_share sh ->
+      ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |--
+         (tc_lvalue Delta e1) && 
+         (tc_expr Delta (Ecast e2 t)) ->
+      (* IFC preconditions: *)
+      val_eq_heap_loc p hl ->
+      (forall x, clsf_expr (N x) true e1 = Some (l1 x)) ->
+      (forall x, clsf_expr (N x) false e2 = Some (l2 x)) ->
+      ifc [x: T] Delta |--
+        (|>PROPx P (LOCALx Q (SEPx R)))
+        (N x)
+        (A x)
+        (Sassign e1 e2)
+        (normal_ret_assert (PROPx P (LOCALx Q (SEPx (replace_nth n R (data_at sh t v_new p))))))
+        (N x)
+        (upd_heap_clsf (A x) hl (max_clsf (l1 x) (l2 x))).
+Abort.
 
 End RULES.
