@@ -8,17 +8,10 @@ Require Export compcert.lib.Integers.
 Require Export compcert.common.Values.
 Require Export compcert.common.Memory.
 Require Export floyd.base.
+Require Export ifc.clsf_expr.
 Require Import List. Import ListNotations.
 
 Definition simplestate := (corestate * mem)%type.
-
-Inductive label : Set := Lo | Hi.
-
-Definition stack_clsf := ident -> label.
-
-Definition heap_loc := (positive * Z)%type. (* block id and offset *)
-
-Definition heap_clsf := heap_loc -> label.
 
 (* TODO this should match VST, i.e. we should have "state_pred = environ->mpred" for preconditions,
    and for postconditions, it's ret_assert in VST *)
