@@ -133,15 +133,18 @@ end.
 Definition upd_heap_clsf(A: heap_clsf)(loc: heap_loc)(l: label): heap_clsf :=
   fun loc0 => if heap_loc_eqb loc0 loc then l else A loc0.
 
-Definition val_eq_heap_loc(v: val)(l: heap_loc): Prop := match v, l with
-| Vptr b1 ofs1, (b2, ofs2) => b1 = b2 /\ ofs1 = ofs2
-| _, _ => False
-end.
+Definition dummy_heap_loc: heap_loc := (1%positive, Int.zero).
+
+Definition force_heap_loc(v: val): heap_loc := 
+  match v with
+  | Vptr b i => (b, i)
+  | _ => dummy_heap_loc
+  end.
 
 Lemma ifc_store{T: Type}:
     forall Delta sh n (p: T -> val) P Q R (e1 e2 : expr)
       (t: type) (v0: T -> val) (v v_new: T -> reptype t)
-      (hl: T -> heap_loc) (l1 l2: T -> label) (N: T -> stack_clsf) (A: T -> heap_clsf),
+      (l1 l2: T -> label) (N: T -> stack_clsf) (A: T -> heap_clsf),
       (* VST preconditions: *)
       typeof e1 = t ->
       type_is_by_value t = true ->
@@ -158,8 +161,7 @@ Lemma ifc_store{T: Type}:
          (tc_expr Delta (Ecast e2 t))) ->
       (* IFC preconditions: *)
       (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
-                 !! (val_eq_heap_loc (p x) (hl x) /\
-                     clsf_expr (N x) true e1 = Some (l1 x) /\
+                 !! (clsf_expr (N x) true e1 = Some (l1 x) /\
                      clsf_expr (N x) false e2 = Some (l2 x))) ->
       ifc [x: T] Delta |--
         (|>PROPx (P x) (LOCALx (Q x) (SEPx (R x))))
@@ -170,39 +172,8 @@ Lemma ifc_store{T: Type}:
                            (LOCALx (Q x)
                            (SEPx (replace_nth n (R x) (data_at sh t (v_new x) (p x)))))))
         (N x)
-        (upd_heap_clsf (A x) (hl x) (max_clsf (l1 x) (l2 x))).
+        (upd_heap_clsf (A x) (force_heap_loc (p x)) (max_clsf (l1 x) (l2 x))).
 Proof.
 Admitted.
-
-(* Old version: P, Q, R cannot depend on x!! *)
-Lemma ifc_store_bad_version{T: Type}:
-    forall Delta sh n (p: val) P Q R (e1 e2 : expr)
-      (t: type) (v0: val) (v v_new: reptype t)
-      (hl: heap_loc) (l1 l2: T -> label) (N: T -> stack_clsf) (A: T -> heap_clsf),
-      (* VST preconditions: *)
-      typeof e1 = t ->
-      type_is_by_value t = true ->
-      type_is_volatile t = false ->
-      nth_error R n = Some (data_at sh t v p) ->
-      ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |-- local (`(eq p) (eval_lvalue e1)) ->
-      ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |-- local (`(eq v0) (eval_expr (Ecast e2 t))) ->
-      JMeq v0 v_new ->
-      writable_share sh ->
-      ENTAIL Delta, PROPx P (LOCALx Q (SEPx R)) |--
-         (tc_lvalue Delta e1) && 
-         (tc_expr Delta (Ecast e2 t)) ->
-      (* IFC preconditions: *)
-      val_eq_heap_loc p hl ->
-      (forall x, clsf_expr (N x) true e1 = Some (l1 x)) ->
-      (forall x, clsf_expr (N x) false e2 = Some (l2 x)) ->
-      ifc [x: T] Delta |--
-        (|>PROPx P (LOCALx Q (SEPx R)))
-        (N x)
-        (A x)
-        (Sassign e1 e2)
-        (normal_ret_assert (PROPx P (LOCALx Q (SEPx (replace_nth n R (data_at sh t v_new p))))))
-        (N x)
-        (upd_heap_clsf (A x) hl (max_clsf (l1 x) (l2 x))).
-Abort.
 
 End RULES.
