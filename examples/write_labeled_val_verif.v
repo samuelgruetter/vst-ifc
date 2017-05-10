@@ -68,14 +68,14 @@ Proof.
   (* setoid_rewrite <- lower_sepcon. setoid_rewrite instead of just rewrite is supposed to work under
      binders, but it takes forever *)
   match goal with
-  | |- ifc_def _ (fun (x: ?T) (rho: ?E) => sepcon (?A ?R) (?B ?R)) _ _ _ _ _ _ =>
+  | |- ifc_def _ _ (fun (x: ?T) (rho: ?E) => sepcon (?A ?R) (?B ?R)) _ _ _ _ _ _ =>
        replace (fun (x: T) (rho: E) => sepcon (A R) (B R))
           with (fun (x: T) (rho: E) => (sepcon A B) R)
             by (do 2 extensionality; apply lower_sepcon)
   end.
 
   match goal with
-  | |- ifc_def _ (fun (x: ?T) (rho: ?E) => ?A rho) _ _ _ _ _ _ =>
+  | |- ifc_def _ _ (fun (x: ?T) (rho: ?E) => ?A rho) _ _ _ _ _ _ =>
        (* note: we also have to include mention x, because A depends on x *)
        replace (fun (x: T) (rho: E) => A rho)
           with (fun (x: T) => A)
@@ -83,7 +83,7 @@ Proof.
   end.
 
   match goal with
-  | |- ifc_def _ (fun (x: ?T) => ?A * emp) _ _ _ _ _ _ =>
+  | |- ifc_def _ _ (fun (x: ?T) => ?A * emp) _ _ _ _ _ _ =>
        (* note: we also have to include mention x, because A depends on x *)
        replace (fun (x: T) => A * emp)
           with (fun (x: T) => A)

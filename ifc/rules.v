@@ -19,7 +19,7 @@ Definition ioverridePost{A: Type}(Q: A -> environ -> mpred)(R : A -> ret_assert)
 
 Ltac split_ifc_hyps :=
   repeat match goal with
-  | H: ifc_def _ _ _ _ _ _ _ _ |- _ =>
+  | H: ifc_def _ _ _ _ _ _ _ _ _ |- _ =>
       let Hs := fresh H "s" in 
       let Hi := fresh H "i" in
       destruct H as [Hs Hi]
@@ -57,9 +57,9 @@ Context (CS: compspecs).
 Lemma ifc_seq{T: Type}:
   forall Delta (P1 P2: T -> environ -> mpred) (P3: T -> ret_assert) h t
     (N1 N2 N3: T -> stack_clsf) (A1 A2 A3: T -> heap_clsf),
-  ifc_def Delta P1 N1 A1 h (ioverridePost P2 P3) N2 A2 ->
-  ifc_def (update_tycon Delta h) P2 N2 A2 t P3 N3 A3 ->
-  ifc_def Delta P1 N1 A1 (Ssequence h t) P3 N3 A3.
+  ifc_def T Delta P1 N1 A1 h (ioverridePost P2 P3) N2 A2 ->
+  ifc_def T (update_tycon Delta h) P2 N2 A2 t P3 N3 A3 ->
+  ifc_def T Delta P1 N1 A1 (Ssequence h t) P3 N3 A3.
 Proof.
   introv H1 H2. split_ifc_hyps. split.
   - intro. apply* semax_seq.
@@ -95,9 +95,9 @@ Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext)
   (b: expr) (c1 c2: statement)
   (P': T -> ret_assert) (N': T -> stack_clsf) (A': T -> heap_clsf),
   bool_type (typeof b) = true ->
-  ifc_def Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
-  ifc_def Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
-  ifc_def Delta P N A (Sifthenelse b c1 c2) P' N' A'.
+  ifc_def T Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
+  ifc_def T Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
+  ifc_def T Delta P N A (Sifthenelse b c1 c2) P' N' A'.
 Proof.
   introv Eq B1 B2.
   split_ifc_hyps. split.

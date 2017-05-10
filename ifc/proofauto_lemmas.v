@@ -12,8 +12,8 @@ Context {CS: compspecs}.
 
 Lemma isequential'{T: Type}:
   forall R Delta P N A c P' N' A',
-    @ifc_def T CS Espec Delta P N A c (inormal_ret_assert P') N' A' ->
-    @ifc_def T CS Espec Delta P N A c (ioverridePost P' R) N' A'.
+    ifc_def T Delta P N A c (inormal_ret_assert P') N' A' ->
+    ifc_def T Delta P N A c (ioverridePost P' R) N' A'.
 Proof.
   intros. unfold ifc_def. unfold ioverridePost. unfold inormal_ret_assert in *.
   split_ifc_hyps. split.
@@ -23,9 +23,9 @@ Qed.
 
 Lemma ifc_seq'{T: Type}:
  forall Delta P1 N1 A1 c1 P2 N2 A2 c2 P3 N3 A3,
-   @ifc_def T CS Espec Delta P1 N1 A1 c1 (inormal_ret_assert P2) N2 A2 ->
-   @ifc_def T CS Espec (update_tycon Delta c1) P2 N2 A2 c2 P3 N3 A3 ->
-   @ifc_def T CS Espec Delta P1 N1 A1 (Ssequence c1 c2) P3 N3 A3.
+   ifc_def T Delta P1 N1 A1 c1 (inormal_ret_assert P2) N2 A2 ->
+   ifc_def T (update_tycon Delta c1) P2 N2 A2 c2 P3 N3 A3 ->
+   ifc_def T Delta P1 N1 A1 (Ssequence c1 c2) P3 N3 A3.
 Proof.
   intros. apply ifc_seq with P2 N2 A2; try assumption. apply isequential'. assumption.
 Qed.
@@ -38,8 +38,8 @@ Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 A1 c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
-  @ifc_def T CS Espec Delta P1' N1 A1 c P2 N2 A2 ->
-  @ifc_def T CS Espec Delta P1  N1 A1 c P2 N2 A2.
+  ifc_def T Delta P1' N1 A1 c P2 N2 A2 ->
+  ifc_def T Delta P1  N1 A1 c P2 N2 A2.
 Proof.
   introv Imp H. split_ifc_hyps. split.
   - intro. apply* semax_pre.

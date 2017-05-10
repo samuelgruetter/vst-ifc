@@ -6,8 +6,8 @@ Require Export floyd.proofauto.
 (* not used (yet?) *)
 Lemma istart_function_aux1:
   forall {T: Type} (Espec: OracleKind) {cs: compspecs} Delta R1 P N A Q N' A' R c Post,
-   @ifc_def T cs Espec Delta (fun rho => (PROPx P (LOCALx Q (SEPx (R1::R))))) N A c Post N' A' ->
-   @ifc_def T cs Espec Delta (fun rho => ((PROPx P (LOCALx Q (SEPx R))) * `R1)) N A c Post N' A'.
+   ifc_def T Delta (fun rho => (PROPx P (LOCALx Q (SEPx (R1::R))))) N A c Post N' A' ->
+   ifc_def T Delta (fun rho => ((PROPx P (LOCALx Q (SEPx R))) * `R1)) N A c Post N' A'.
 Proof.
 intros.
 rewrite sepcon_comm. rewrite insert_SEP. apply H.
@@ -30,7 +30,7 @@ Ltac start_VST :=
 (* This tactic is carefully tuned to avoid proof blowups,
   both in execution and in Qed *)
 Ltac isimplify_func_tycontext :=
-match goal with |- ifc_def ?DD _ _ _ _ _ _ _ =>
+match goal with |- ifc_def _ ?DD _ _ _ _ _ _ _ =>
   match DD with context [(func_tycontext ?f ?V ?G)] =>
     (*ensure_no_augment_funspecs;*)
     let D1 := fresh "D1" in let Delta := fresh "Delta" in
@@ -63,7 +63,7 @@ Ltac iprocess_stackframe_of :=
        [ reflexivity | reflexivity | reflexivity | reflexivity | reflexivity | intros ?lvar0 ]
      end
     end;*)
-  match goal with |- ifc_def _ ?Pre _ _ _ _ _ _ =>
+  match goal with |- ifc_def _ _ ?Pre _ _ _ _ _ _ =>
      let p := fresh "p" in set (p := Pre);
      rewrite <- (@emp_sepcon (environ->mpred) _ _ _ (fold_right _ _ _));
      subst p
