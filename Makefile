@@ -1,4 +1,6 @@
 
+default_target: examples
+
 # the file ./CONFIGURE should contain a line of the form
 # VSTDIR=path/to/the/VST/directory
 -include CONFIGURE
