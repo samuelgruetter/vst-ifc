@@ -87,6 +87,12 @@ Proof.
 Grab Existential Variables. exact nil. exact nil. exact nil. exact nil.
 Qed.
 
+Lemma ifc_seq_skip{T: Type}:
+  forall Delta P N A c P' N' A',
+  ifc_def T Delta P N A c P' N' A' <-> ifc_def T Delta P N A (Ssequence c Sskip) P' N' A'.
+Proof.
+Admitted.
+
 Definition inormal_ret_assert{A: Type}(P: A -> environ -> mpred): A -> ret_assert :=
   fun (x: A) => normal_ret_assert (P x).
 

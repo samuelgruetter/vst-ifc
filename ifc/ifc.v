@@ -31,6 +31,10 @@ Parameter VST_post_to_state_pred : ret_assert -> state_pred.
 Axiom VST_overridePost_to_state_pred: forall Q R,
   VST_post_to_state_pred (overridePost Q R) = VST_pre_to_state_pred Q.
 
+Axiom VST_pre_to_state_pred_commutes_imp: forall P P',
+  (P |-- P') ->
+  (forall e te m, VST_pre_to_state_pred P e te m -> VST_pre_to_state_pred P' e te m).
+
 Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=
   | star_refl: forall s m,
       star ge s m s m

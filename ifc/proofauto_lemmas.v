@@ -1,5 +1,6 @@
 Require Import floyd.base.
 Require Import floyd.canon.
+Require Import floyd.client_lemmas.
 Require Import ifc.rules.
 Require Import ifc.ifc.
 Require Import lib.LibTactics.
@@ -80,5 +81,18 @@ Proof.
     + subst f. extensionality. admit.
   - admit.
 Admitted.
+
+Lemma ifc_later_trivial{T: Type}:
+  forall Delta P N A c P' N' A',
+  ifc_def T Delta (fun x => (|> (P x))) N A c P' N' A' ->
+  ifc_def T Delta                P      N A c P' N' A'.
+Proof.
+  intros. split_ifc_hyps. unfold ifc_def, ifc_core, simple_ifc in *. split.
+  - intro. apply* semax_later_trivial.
+  - introv Sat Sat'.
+    apply VST_pre_to_state_pred_commutes_imp with (P' := (|> P x )) in Sat ; [ | apply now_later ].
+    apply VST_pre_to_state_pred_commutes_imp with (P' := (|> P x')) in Sat'; [ | apply now_later ].
+    apply* Hi.
+Qed.
 
 End fwd_lemmas.
