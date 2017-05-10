@@ -8,6 +8,7 @@ Require Export compcert.lib.Integers.
 Require Export compcert.common.Values.
 Require Export compcert.common.Memory.
 Require Export floyd.base.
+Require Export floyd.canon.
 Require Export ifc.clsf_expr.
 Require Import List. Import ListNotations.
 
@@ -30,6 +31,10 @@ Axiom VST_overridePost_to_state_pred: forall Q R,
 
 Axiom VST_pre_to_state_pred_commutes_imp: forall P P',
   (P |-- P') ->
+  (forall e te m, VST_pre_to_state_pred P e te m -> VST_pre_to_state_pred P' e te m).
+
+Axiom VST_pre_to_state_pred_commutes_imp': forall Delta P P',
+  (ENTAIL Delta, P |-- P') ->
   (forall e te m, VST_pre_to_state_pred P e te m -> VST_pre_to_state_pred P' e te m).
 
 Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=

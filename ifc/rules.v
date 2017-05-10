@@ -123,6 +123,54 @@ Proof.
     (* how to express and use restriction that b must not depend on Hi data? *)
 Admitted.
 
+Lemma ifc_return{T: Type}:
+  forall Delta R N A ret,
+  ifc_def T Delta
+          (fun x => (tc_expropt Delta ret (ret_type Delta) &&
+                    `( R x EK_return : option val -> environ -> mpred)
+                     (cast_expropt ret (ret_type Delta)) id)) N A
+          (Sreturn ret)
+          (fun x => R x) N A.
+Proof.
+  intros. unfold ifc_def, ifc_core, simple_ifc. split.
+  - intro x. apply semax_return.
+  - introv Sat Sat' SE HE Star Star'.
+    inverts Star as Step Star.
+    inverts Step. simpl in H3. discriminate.
+    (* TODO H3 is a contradiction, and this points out that our simple_ifc definition is flawed:
+       We cannot return if there are no further commands left to execute after the return *)
+Qed.
+
+Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
+  (forall x, ENTAIL Delta, P1 x |-- P1' x &&
+                                    !! (forall i, N1 x i = N1' x i) &&
+                                    !! (forall l, A1 x l = A1' x l)) ->
+  ifc_def T Delta P1' N1' A1' c P2 N2 A2 ->
+  ifc_def T Delta P1  N1  A1  c P2 N2 A2.
+Proof.
+  introv Imp H.
+  assert (forall x, ENTAIL Delta, P1 x |-- P1' x) as E. {
+    intro x. eapply derives_trans; [ apply Imp | ]. do 2 apply andp_left1. apply derives_refl.
+  }
+ split_ifc_hyps. split.
+  - intro. apply semax_pre with (P' := P1' x); auto.
+  - unfold ifc_core, simple_ifc in *.
+    introv Sat Sat' SE HE.
+    apply VST_pre_to_state_pred_commutes_imp' with (Delta := Delta) (P' := P1' x ) in Sat;
+      [ | apply E ].
+    apply VST_pre_to_state_pred_commutes_imp' with (Delta := Delta) (P' := P1' x') in Sat';
+      [ | apply E ].
+    apply* Hi.
+    + replace (N1' x) with (N1 x).
+      replace (N1' x') with (N1 x').
+      assumption.
+      (* These follow from Imp, modulo incompatibility with VST *)
+      extensionality. admit.
+      extensionality. admit.
+    + admit. (* similar *)
+Admitted.
+
+(*
 Definition upd_stack_clsf(N: stack_clsf)(i: ident)(l: label): stack_clsf :=
   fun i0 => if Pos.eqb i0 i then l else N i0.
 
@@ -140,6 +188,12 @@ Definition force_heap_loc(v: val): heap_loc :=
   | Vptr b i => (b, i)
   | _ => dummy_heap_loc
   end.
+*)
+
+Definition heap_loc_eq_val(hl: heap_loc)(v: val): bool := match hl, v with
+| (b1, i1), Vptr b2 i2 => Pos.eqb b1 b2 && Int.eq i1 i2
+| _, _ => false
+end.
 
 Lemma ifc_store{T: Type}:
     forall Delta sh n (p: T -> val) P Q R (e1 e2 : expr)
@@ -172,7 +226,7 @@ Lemma ifc_store{T: Type}:
                            (LOCALx (Q x)
                            (SEPx (replace_nth n (R x) (data_at sh t (v_new x) (p x)))))))
         (N x)
-        (upd_heap_clsf (A x) (force_heap_loc (p x)) (max_clsf (l1 x) (l2 x))).
+        (fun loc => if heap_loc_eq_val loc (p x) then max_clsf (l1 x) (l2 x) else A x loc).
 Proof.
 Admitted.
 

@@ -31,13 +31,8 @@ Proof.
   intros. apply ifc_seq with P2 N2 A2; try assumption. apply isequential'. assumption.
 Qed.
 
-Lemma VST_pre: forall Delta P P' e1 te1 m1,
-  ENTAIL Delta, P |-- P' ->
-  VST_pre_to_state_pred P e1 te1 m1 ->
-  VST_pre_to_state_pred P' e1 te1 m1.
-Admitted.
-
-Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 A1 c P2 N2 A2,
+(* only changes P1, but not N1 and A1 *)
+Lemma ifc_pre0{T: Type}: forall Delta P1 P1' N1 A1 c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
   ifc_def T Delta P1' N1 A1 c P2 N2 A2 ->
   ifc_def T Delta P1  N1 A1 c P2 N2 A2.
@@ -45,7 +40,7 @@ Proof.
   introv Imp H. split_ifc_hyps. split.
   - intro. apply* semax_pre.
   - unfold ifc_core, simple_ifc in *. intros.
-    apply* Hi; apply* VST_pre.
+    apply* Hi; apply* VST_pre_to_state_pred_commutes_imp'.
 Qed.
 
 Lemma ifc_ifthenelse_PQR{T: Type}:
@@ -63,7 +58,7 @@ Lemma ifc_ifthenelse_PQR{T: Type}:
                          (Sifthenelse b c d) (Post x) (N' x) (A' x).
 Proof.
   introv Eq Tc Ev B1 B2.
-  eapply ifc_pre; [ | apply ifc_ifthenelse ]; unfold iand, iprop; try assumption.
+  eapply ifc_pre0; [ | apply ifc_ifthenelse ]; unfold iand, iprop; try assumption.
   - instantiate (1:=
       (fun x => (local (`(eq (v x)) (eval_expr b))) && PROPx (P x) (LOCALx (Q x) (SEPx (R x))))).
     intro. apply andp_right; [ apply (Ev x) | ]. apply andp_left2. apply derives_refl.

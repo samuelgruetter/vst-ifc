@@ -21,6 +21,11 @@ Record MyMetaVars: Type := { v: int; b: int; highptr: val; lowptr: val }.
 
 Set Printing Projections. (* to get x.(b) instead of (b x) in output *)
 
+(* to get "_ =? _" notation on ident without having to write (_ =? _)%positive *)
+Local Open Scope positive.
+(* to avoid silly simpl *)
+Arguments Pos.eqb: simpl never. 
+
 Definition write_labeled_val_spec: ifc_funspec := {|
   functional_spec :=
     DECLARE _write_labeled_val
@@ -37,18 +42,25 @@ Definition write_labeled_val_spec: ifc_funspec := {|
          data_at Ews tint (if Int.eq x.(b) Int.zero then Vint x.(v) else Vundef) x.(lowptr)
        ));
   ifc_stack_pre :=
-    (fun (x: MyMetaVars) (i: ident) => PMap.get i 
-      (PMap.set _v (if Int.eq x.(b) Int.zero then Lo else Hi)
-      (PMap.set _b Lo
-      (PMap.set _highptr Hi
-      (PMap.set _lowptr Lo
-      (PMap.init Hi))))));
+    (fun (x: MyMetaVars) (i: ident) =>
+          if i =? _v then (if Int.eq x.(b) Int.zero then Lo else Hi)
+     else if i =? _b then Lo
+     else if i =? _highptr then Hi
+     else if i =? _lowptr then Lo
+     else Hi
+    );
   ifc_heap_pre :=
-    (fun (x: MyMetaVars) (loc: heap_loc) => Hi);
+    (fun (x: MyMetaVars) (loc: heap_loc) =>
+          if heap_loc_eq_val loc x.(lowptr) then Lo
+     else if heap_loc_eq_val loc x.(highptr) then Hi
+     else Hi);
   ifc_stack_post :=
     (fun (x: MyMetaVars) (i: ident) => Hi);
   ifc_heap_post :=
-    (fun (x: MyMetaVars) (loc: heap_loc) => Hi)
+    (fun (x: MyMetaVars) (loc: heap_loc) =>
+          if heap_loc_eq_val loc x.(lowptr) then Lo
+     else if heap_loc_eq_val loc x.(highptr) then Hi
+     else Hi)
 |}.
 
 Definition Gprog: funspecs := [].
@@ -83,9 +95,9 @@ Proof.
   end.
 
   match goal with
-  | |- ifc_def _ _ (fun (x: ?T) => ?A * emp) _ _ _ _ _ _ =>
+  | |- ifc_def _ _ (fun (x: ?T) => (?A * emp)%logic) _ _ _ _ _ _ =>
        (* note: we also have to include mention x, because A depends on x *)
-       replace (fun (x: T) => A * emp)
+       replace (fun (x: T) => (A * emp)%logic)
           with (fun (x: T) => A)
             by (extensionality; symmetry; apply sepcon_emp)
   end.
@@ -127,11 +139,7 @@ Proof.
   - (* else-branch *)
     apply ifc_later_trivial.
     rewrite -> ifc_seq_skip. eapply ifc_seq'. {
-      pose (hlf := fun x => match x.(lowptr) with
-                            | Vptr b i => (b, i)
-                            | _ => (1%positive, Int.zero)
-                            end : heap_loc).
-      eapply ifc_store with (n := 1%nat) (hl := hlf); try reflexivity; try intro x; subst hlf.
+        eapply ifc_store with (n := 1%nat); try reflexivity; try intro x.
       + entailer!.
       + entailer.
       + apply JMeq_refl.
@@ -143,16 +151,22 @@ Proof.
            isptr instead of only is_pointer_or_null. *)
         entailer!.
     } {
-      simpl update_tycon.
+      simpl update_tycon. simpl. unfold inormal_ret_assert.
       eapply ifc_pre; [ | eapply ifc_skip ]. intro.
       Intros. clear H0. rewrite H.
       entailer!.
     }
   } {
-  unfold ifc_def. split.
-  + (* VST part *)
-    intros. forward.
-  + (* IFC part *)
-    apply ifc_core0_always_holds.
+  eapply ifc_pre; [ | eapply ifc_return ]. intro.
+  entailer!.
+  (* Now we have to prove that the calculated stack and heap classification corresponds to the
+     postconditions given in the funspec: *)
+  split.
+  - (* heap: *)
+    intro. destruct (heap_loc_eq_val l x.(lowptr)); reflexivity.
+  - (* stack: *)
+    intro. (* TODO now _v and _b should be "gone"! *)
+    (* TODO ifc_pre should use "less than" rather than equality in classifications *)
+    admit.
   }
-Qed.
+Admitted.
