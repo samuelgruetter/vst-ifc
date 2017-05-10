@@ -63,7 +63,7 @@ Proof.
 Qed.
 
 Definition heap_access(m: mem)(l: heap_loc): memval :=
-  let (b, i) := l in (ZMap.get i (PMap.get b (Mem.mem_contents m))).
+  let (b, i) := l in (ZMap.get (Int.signed i) (PMap.get b (Mem.mem_contents m))).
 
 Definition heap_lo_equiv(m1 m2: mem)(A1 A2: heap_clsf): Prop :=
   gen_lo_equiv A1 A2 (heap_access m1) (heap_access m2).

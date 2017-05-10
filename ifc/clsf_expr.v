@@ -14,7 +14,7 @@ Definition max_oclsf(l1 l2: option label): option label := match l1, l2 with
 
 Definition stack_clsf := ident -> label.
 
-Definition heap_loc := (positive * Z)%type. (* block id and offset *)
+Definition heap_loc := (positive * int)%type. (* block id and offset *)
 
 Definition heap_clsf := heap_loc -> label.
 

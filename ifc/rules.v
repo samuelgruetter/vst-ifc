@@ -118,14 +118,14 @@ Definition upd_stack_clsf(N: stack_clsf)(i: ident)(l: label): stack_clsf :=
   fun i0 => if Pos.eqb i0 i then l else N i0.
 
 Definition heap_loc_eqb(l1 l2: heap_loc): bool := match l1, l2 with
-  | (b1, ofs1), (b2, ofs2) => Pos.eqb b1 b2 && Z.eqb ofs1 ofs2
+  | (b1, ofs1), (b2, ofs2) => Pos.eqb b1 b2 && Int.eq ofs1 ofs2
 end.
 
 Definition upd_heap_clsf(A: heap_clsf)(loc: heap_loc)(l: label): heap_clsf :=
   fun loc0 => if heap_loc_eqb loc0 loc then l else A loc0.
 
 Definition val_eq_heap_loc(v: val)(l: heap_loc): Prop := match v, l with
-| Vptr b1 ofs1, (b2, ofs2) => b1 = b2 /\ ofs1 = Int.repr ofs2
+| Vptr b1 ofs1, (b2, ofs2) => b1 = b2 /\ ofs1 = ofs2
 | _, _ => False
 end.
 
