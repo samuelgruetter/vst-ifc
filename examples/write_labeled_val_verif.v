@@ -90,6 +90,8 @@ Proof.
             by (extensionality; symmetry; apply sepcon_emp)
   end.
 
+  evar (newN: MyMetaVars -> stack_clsf).
+  evar (newA: MyMetaVars -> heap_clsf).
   eapply ifc_seq' with
     (P2 := fun x => (PROP (x.(b) = Int.zero \/ x.(b) = Int.one)
      LOCAL (temp _v (Vint x.(v)); temp _b (Vint x.(b));
@@ -99,11 +101,8 @@ Proof.
        data_at Ews tint (if Int.eq x.(b) Int.zero then Vundef else Vint x.(v)) x.(highptr);
        data_at Ews tint (if Int.eq x.(b) Int.zero then Vint x.(v) else Vundef) x.(lowptr))
      ))
-    (N2 := fun x => (fun i : ident =>
-            (PMap.set _v (if Int.eq x.(b) Int.zero then Lo else Hi)
-            (PMap.set _b Lo
-            (PMap.set _highptr Hi (PMap.set _lowptr Lo (PMap.init Hi))))) !! i))
-    (A2 := fun x => (fun _ : heap_loc => Hi)).
+    (N2 := newN)
+    (A2 := newA); subst newN newA.
   {
   (* Note: even though the precondition is not explicitly written in the form
      "fun x: MyMetaVars => PROP (P x) LOCAL (Q x) SEP (R x)", where P, Q, R are functions, but
@@ -126,21 +125,29 @@ Proof.
     + (* IFC part *)
       apply ifc_core0_always_holds.
   - (* else-branch *)
-    unfold ifc_def. split.
-    + (* VST part *)
-      start_VST.
-      Intros. clear H0. subst b0.
-      (* test: apply a simpler store lemma, semax_SC_field_store_without_paths, manually *)
-      rewrite -> semax_seq_skip.
-      eapply semax_seq'. {
-        hoist_later_in_pre.
-        eapply semax_SC_field_store_without_paths with (n := 1%nat);
-          auto; try reflexivity; auto; entailer!.
-      }
-      fwd_result. fwd_skip. entailer!.
-      (* end of test, and it was only 7 lines *)
-    + (* IFC part *)
-      apply ifc_core0_always_holds.
+    apply ifc_later_trivial.
+    rewrite -> ifc_seq_skip. eapply ifc_seq'. {
+      pose (hlf := fun x => match x.(lowptr) with
+                            | Vptr b i => (b, i)
+                            | _ => (1%positive, Int.zero)
+                            end : heap_loc).
+      eapply ifc_store with (n := 1%nat) (hl := hlf); try reflexivity; try intro x; subst hlf.
+      + entailer!.
+      + entailer.
+      + apply JMeq_refl.
+      + auto.
+      + entailer!.
+      + assert_PROP (isptr x.(lowptr)) as IP. { entailer!. }
+        destruct x.(lowptr); try contradiction. clear IP.
+        (* TODO floyd: the two lines above would not be necessary if entailer! gave me
+           isptr instead of only is_pointer_or_null. *)
+        entailer!.
+    } {
+      simpl update_tycon.
+      eapply ifc_pre; [ | eapply ifc_skip ]. intro.
+      Intros. clear H0. rewrite H.
+      entailer!.
+    }
   } {
   unfold ifc_def. split.
   + (* VST part *)

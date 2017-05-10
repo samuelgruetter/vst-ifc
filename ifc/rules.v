@@ -50,9 +50,12 @@ Definition iand{A: Type}(P1: A -> pre_assert)(P2: A -> pre_assert): A -> pre_ass
 
 Definition iprop{A: Type}(P: pre_assert): A -> pre_assert := fun (_: A) => P.
 
+Definition inormal_ret_assert{A: Type}(P: A -> environ -> mpred): A -> ret_assert :=
+  fun (x: A) => normal_ret_assert (P x).
+
 Section RULES.
-Context (Espec : OracleKind).
-Context (CS: compspecs).
+Context {Espec : OracleKind}.
+Context {CS: compspecs}.
 
 Lemma ifc_seq{T: Type}:
   forall Delta (P1 P2: T -> environ -> mpred) (P3: T -> ret_assert) h t
@@ -87,14 +90,20 @@ Proof.
 Grab Existential Variables. exact nil. exact nil. exact nil. exact nil.
 Qed.
 
+Lemma ifc_skip{T: Type}:
+  forall Delta P N A,
+  ifc_def T Delta P N A Sskip (inormal_ret_assert P) N A.
+Proof.
+  intros. unfold ifc_def, ifc_core, simple_ifc. split.
+  - intro x. apply semax_skip.
+  - introv Sat Sat' SE HE Star Star'.
+Admitted.
+
 Lemma ifc_seq_skip{T: Type}:
   forall Delta P N A c P' N' A',
   ifc_def T Delta P N A c P' N' A' <-> ifc_def T Delta P N A (Ssequence c Sskip) P' N' A'.
 Proof.
 Admitted.
-
-Definition inormal_ret_assert{A: Type}(P: A -> environ -> mpred): A -> ret_assert :=
-  fun (x: A) => normal_ret_assert (P x).
 
 Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext) 
   (P: T -> pre_assert) (N: T -> stack_clsf) (A: T -> heap_clsf)
@@ -148,9 +157,10 @@ Lemma ifc_store{T: Type}:
          (tc_lvalue Delta e1) && 
          (tc_expr Delta (Ecast e2 t))) ->
       (* IFC preconditions: *)
-      (forall x, val_eq_heap_loc (p x) (hl x)) ->
-      (forall x, clsf_expr (N x) true e1 = Some (l1 x)) ->
-      (forall x, clsf_expr (N x) false e2 = Some (l2 x)) ->
+      (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+                 !! (val_eq_heap_loc (p x) (hl x) /\
+                     clsf_expr (N x) true e1 = Some (l1 x) /\
+                     clsf_expr (N x) false e2 = Some (l2 x))) ->
       ifc [x: T] Delta |--
         (|>PROPx (P x) (LOCALx (Q x) (SEPx (R x))))
         (N x)

@@ -20,9 +20,6 @@ Definition state_pred := env -> temp_env -> mem -> Prop.
 Definition pre_assert := environ -> mpred.
 (* "ret_assert := exitkind -> option val -> environ -> mpred" is already defined by VST *)
 
-Definition ifc_pre(A: Type) := ((A -> pre_assert) * (A -> stack_clsf) * (A -> heap_clsf))%type.
-Definition ifc_post(A: Type) := ((A -> ret_assert) * (A -> stack_clsf) * (A -> heap_clsf))%type.
-
 (* TODO get rid of these *)
 Parameter VST_pre_to_state_pred : pre_assert -> state_pred.
 Parameter VST_post_to_state_pred : ret_assert -> state_pred.
