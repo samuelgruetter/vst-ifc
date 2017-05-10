@@ -9,7 +9,8 @@ Require Import floyd.canon.
 Require Import floyd.forward_lemmas.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
-Require Import ifc.ifc.
+Require Import ifc.simple_vst_store_lemmas.
+Require Import ifc.proofauto.
 Require Import lib.LibTactics.
 
 Local Open Scope logic.
@@ -195,6 +196,83 @@ Definition heap_loc_eq_val(hl: heap_loc)(v: val): bool := match hl, v with
 | _, _ => false
 end.
 
+
+(* FIXME: move to ifc.ifc or better yet find out whether
+          there already exists a definition of terminating
+          executions over the semantics we're using so we
+          don't have to reinvent the wheel *)
+Lemma bigstep_null:
+    forall ge s s' e te e' te' m m' c',
+    star ge s m s' m' ->
+    s = (State e te []) ->
+    s' = (State e' te' c') ->
+    m' = m /\ e' = e /\ te' = te /\ c' = [].
+  intros.
+  induction H.
+  - rewrite -> H1 in H0.
+    inversion H0.
+    auto.
+  - induction H;
+    inversion H0.
+Qed.
+
+Lemma bigstep_sassign:
+    forall ge s s' e te e1 e2 m e' te' m', 
+    star ge s m s' m' ->
+    s = (State e te [Kseq (Sassign e1 e2)]) ->
+    s' = (State e' te' []) ->
+    exists loc ofs v1 v2, 
+      Clight.eval_lvalue ge e te m e1 loc ofs /\
+      type_is_volatile (typeof e1) = false /\
+      Clight.eval_expr ge e te m e2 v2 /\
+      assign_loc ge (typeof e1) m loc ofs v1 m' /\
+      Cop.sem_cast v2 (typeof e2) (typeof e1) m = Some v1
+    .
+  intros.
+  induction H as [|].
+  - rewrite -> H1 in H0.
+    inversion H0.
+  - (* do we have to do induction on cl_step? Is there
+       already an elimination rule for this particular
+       case? *)
+    induction H.
+    + inversion H0.
+      subst a1 a2 k ve te0 s3. 
+      assert (m3 = m' /\ e' = e /\ te' = te /\ ([] : cont) = ([] : cont)). {
+        eapply bigstep_null.
+        eapply H2.
+        reflexivity.
+        reflexivity.
+      }
+      destruct H1 as [H1 H1'].
+      destruct H1' as [H1' H1''].
+      destruct H1'' as [H1'' H1'''].
+      subst m3 e' te'.
+      exists loc ofs v v2.
+      split. apply H3.
+      split. apply H.
+      split. apply H4.
+      split. apply H6.
+      apply H5.
+      (* the following is not only horrible but also
+         brittle because the name H0 is chosen automatically
+         how to fix? *)
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+    + inversion H0.
+Qed.
+
 Lemma ifc_store{T: Type}:
     forall Delta sh n (p: T -> val) P Q R (e1 e2 : expr)
       (t: type) (v0: T -> val) (v v_new: T -> reptype t)
@@ -228,6 +306,29 @@ Lemma ifc_store{T: Type}:
         (N x)
         (fun loc => if heap_loc_eq_val loc (p x) then max_clsf (l1 x) (l2 x) else A x loc).
 Proof.
-Admitted.
+  unfold ifc_def. split.
+  -
+    intros x.
+    eapply semax_SC_field_store_without_paths.
+     + apply H.
+     + apply H0.
+     + apply H1.
+     + apply H2.
+     + apply H3.
+     + apply H4.
+     + apply H5.
+     + apply H6.
+     + apply H7.
+  - unfold ifc_core. unfold simple_ifc.
+    intros.
+    (* OK, now how to reason forward using bigstep_assign? *)
+    eapply bigstep_sassign in H13.
+    (* annoying, the new goals get put after the current one *)
+    2: reflexivity.
+    2: reflexivity.
+    (* OK now have semantic information about the effect
+       of the store statement which we need to use to
+       prove the infoflow conditions *)
+    Admitted.
 
 End RULES.
