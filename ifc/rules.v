@@ -207,6 +207,7 @@ Lemma bigstep_null:
     s = (State e te []) ->
     s' = (State e' te' c') ->
     m' = m /\ e' = e /\ te' = te /\ c' = [].
+Proof.
   intros.
   inversion H; subst.
   - inversion H4.
@@ -224,8 +225,8 @@ Lemma bigstep_sassign:
       type_is_volatile (typeof e1) = false /\
       Clight.eval_expr ge e te m e2 v2 /\
       assign_loc ge (typeof e1) m loc ofs v1 m' /\
-      Cop.sem_cast v2 (typeof e2) (typeof e1) m = Some v1
-    .
+      Cop.sem_cast v2 (typeof e2) (typeof e1) m = Some v1.
+Proof.
   intros.
   inversion H; subst.
   - inversion H4.
@@ -268,29 +269,17 @@ Lemma ifc_store{T: Type}:
         (N x)
         (fun loc => if heap_loc_eq_val loc (p x) then max_clsf (l1 x) (l2 x) else A x loc).
 Proof.
+  introv EqT ByVal Volatile GetR Eval1 Eval2 JM Wsh Tc Ifc.
   unfold ifc_def. split.
-  -
-    intros x.
-    eapply semax_SC_field_store_without_paths.
-     + apply H.
-     + apply H0.
-     + apply H1.
-     + apply H2.
-     + apply H3.
-     + apply H4.
-     + apply H5.
-     + apply H6.
-     + apply H7.
+  - intros x.
+    eapply semax_SC_field_store_without_paths; eauto.
   - unfold ifc_core. unfold simple_ifc.
-    intros.
+    introv Sat Sat' SE HE Star Star'.
     (* OK, now how to reason forward using bigstep_assign? *)
-    eapply bigstep_sassign in H13.
-    (* annoying, the new goals get put after the current one *)
-    2: reflexivity.
-    2: reflexivity.
+    eapply bigstep_sassign in Star; [ | reflexivity | reflexivity ].
     (* OK now have semantic information about the effect
        of the store statement which we need to use to
        prove the infoflow conditions *)
-    Admitted.
+Admitted.
 
 End RULES.
