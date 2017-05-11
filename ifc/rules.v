@@ -10,7 +10,8 @@ Require Import floyd.forward_lemmas.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
 Require Import ifc.simple_vst_store_lemmas.
-Require Import ifc.proofauto.
+Require Import ifc.ifc.
+Require Import List. Import ListNotations.
 Require Import lib.LibTactics.
 
 Local Open Scope logic.
@@ -196,7 +197,6 @@ Definition heap_loc_eq_val(hl: heap_loc)(v: val): bool := match hl, v with
 | _, _ => false
 end.
 
-
 (* FIXME: move to ifc.ifc or better yet find out whether
           there already exists a definition of terminating
           executions over the semantics we're using so we
@@ -208,12 +208,10 @@ Lemma bigstep_null:
     s' = (State e' te' c') ->
     m' = m /\ e' = e /\ te' = te /\ c' = [].
   intros.
-  induction H.
-  - rewrite -> H1 in H0.
-    inversion H0.
+  inversion H; subst.
+  - inversion H4.
     auto.
-  - induction H;
-    inversion H0.
+  - inversion H2.
 Qed.
 
 Lemma bigstep_sassign:
@@ -229,48 +227,12 @@ Lemma bigstep_sassign:
       Cop.sem_cast v2 (typeof e2) (typeof e1) m = Some v1
     .
   intros.
-  induction H as [|].
-  - rewrite -> H1 in H0.
-    inversion H0.
-  - (* do we have to do induction on cl_step? Is there
-       already an elimination rule for this particular
-       case? *)
-    induction H.
-    + inversion H0.
-      subst a1 a2 k ve te0 s3. 
-      assert (m3 = m' /\ e' = e /\ te' = te /\ ([] : cont) = ([] : cont)). {
-        eapply bigstep_null.
-        eapply H2.
-        reflexivity.
-        reflexivity.
-      }
-      destruct H1 as [H1 H1'].
-      destruct H1' as [H1' H1''].
-      destruct H1'' as [H1'' H1'''].
-      subst m3 e' te'.
-      exists loc ofs v v2.
-      split. apply H3.
-      split. apply H.
-      split. apply H4.
-      split. apply H6.
-      apply H5.
-      (* the following is not only horrible but also
-         brittle because the name H0 is chosen automatically
-         how to fix? *)
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
-    + inversion H0.
+  inversion H; subst.
+  - inversion H4.
+  - inversion H2; subst.
+    eapply bigstep_null in H3; try reflexivity.
+    destruct H3 as [? [? [? ?]]]. subst.
+    do 4 eexists. eauto.
 Qed.
 
 Lemma ifc_store{T: Type}:
