@@ -99,11 +99,13 @@ Lemma blah{A : Type}:
   forall (a : A) b,
   (cons a b) = b -> False.
   intros a b.
+Proof.
   induction b as [| a' b' IH].
   - intros H. inversion H.
   - intros H. inversion H. subst.
   apply IH. apply H2.
 Qed.
+(* "Search (?h :: ?t = ?t)." only gives the above lemma, so probably that doesn't exist already *)
 
 Lemma star_null:
   forall ge s s' m m',
@@ -175,10 +177,10 @@ Proof.
   - intro x. apply semax_return.
   - introv Sat Sat' SE HE Star Star'.
     inverts Star as Step Star.
-    inverts Step. simpl in H3. discriminate.
-    (* TODO H3 is a contradiction, and this points out that our simple_ifc definition is flawed:
-       We cannot return if there are no further commands left to execute after the return *)
-Qed.
+    + exfalso. eapply blah. eapply Step.
+    + inversion Step. subst.
+    (* TODO... *)
+Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- P1' x &&
@@ -306,9 +308,8 @@ Proof.
     eapply semax_SC_field_store_without_paths; eauto.
   - unfold ifc_core. unfold simple_ifc.
     introv Sat Sat' SE HE Star Star'.
-    eapply bigstep_sassign in Star.
-    Search corestepN.
-    inversion Star.
+    (* eapply bigstep_sassign in Star.
+    inversion Star. *)
     (* OK now have semantic information about the effect
        of the store statement which we need to use to
        prove the infoflow conditions *)
