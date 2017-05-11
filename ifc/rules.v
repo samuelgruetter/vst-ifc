@@ -27,11 +27,12 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
-Lemma star_seq_inv: forall ge e1 te1 e3 te3 h t m1 m3,
-  star ge (State e1 te1 (Kseq (Ssequence h t) :: nil)) m1 (State e3 te3 nil) m3 ->
-  exists e2 te2 m2, star ge (State e1 te1 (Kseq h :: nil)) m1 (State e2 te2 nil) m2
-                 /\ star ge (State e2 te2 (Kseq t :: nil)) m2 (State e3 te3 nil) m3.
+Lemma star_seq_inv: forall ge e1 te1 e3 te3 h t m1 m3 c,
+  star ge (State e1 te1 (Kseq (Ssequence h t) :: c)) m1 (State e3 te3 c) m3 ->
+  exists e2 te2 m2, star ge (State e1 te1 (Kseq h :: Kseq t :: c)) m1 (State e2 te2 (Kseq t :: c)) m2
+                 /\ star ge (State e2 te2 (Kseq t :: c)) m2 (State e3 te3 c) m3.
 Proof.
+(* old proof
   intros. inverts H as Step Star. inverts Step as Step.
   pose proof (star_step _ _ _ _ _ _ _ Step Star) as H. clear Star Step s2 m2.
   remember (State e1 te1 (Kseq h :: Kseq t :: nil)) as s1.
@@ -43,6 +44,7 @@ Proof.
     intros. rewrite Heqs1 in Heqs3. discriminate.
   - (* star_step *)
     intros. (* this IH is not strong enough... *)
+*)
 Admitted.
 
 (* We need lifting on top of VST's lifting... *)
@@ -69,7 +71,7 @@ Proof.
   introv H1 H2. split_ifc_hyps. split.
   - intro. apply* semax_seq.
   - unfold ifc_core, simple_ifc in *.
-    intros x x' ge e1 e1' e3 e3' te1 te1' te3 te3' m1 m1' m3 m3'.
+    intros x x' ge e1 e1' e3 e3' te1 te1' te3 te3' m1 m1' m3 m3' c'.
     intros Sat1 Sat1' SE1 HE1 Star1 Star1'.
     apply star_seq_inv in Star1. destruct Star1 as [e2 [te2 [m2 [Star1 Star2]]]].
     apply star_seq_inv in Star1'. destruct Star1' as [e2' [te2' [m2' [Star1' Star2']]]].
@@ -81,9 +83,9 @@ Proof.
     + exact Star1.
     + exact Star1'.
     + clear H1i. eapply H2i.
-      * pose proof (VST_sound _ _ _ _ (H1s x)) as C. unfold ioverridePost in C.
+      * pose proof (VST_sound _ _ _ _ (Kseq t :: c') (H1s x)) as C. unfold ioverridePost in C.
         erewrite <- VST_overridePost_to_state_pred. apply* C.
-      * pose proof (VST_sound _ _ _ _ (H1s x')) as C. unfold ioverridePost in C.
+      * pose proof (VST_sound _ _ _ _ (Kseq t :: c') (H1s x')) as C. unfold ioverridePost in C.
         erewrite <- VST_overridePost_to_state_pred. apply* C.
       * apply* stack_lo_equiv_change_cmd.
       * exact HE2.
@@ -92,6 +94,41 @@ Proof.
 Grab Existential Variables. exact nil. exact nil. exact nil. exact nil.
 Qed.
 
+(* What's the inbuilt lemma? *)
+Lemma blah{A : Type}:
+  forall (a : A) b,
+  (cons a b) = b -> False.
+  intros a b.
+  induction b as [| a' b' IH].
+  - intros H. inversion H.
+  - intros H. inversion H. subst.
+  apply IH. apply H2.
+Qed.
+
+Lemma star_null:
+  forall ge s s' m m',
+  star ge s m s' m' ->
+  forall e te c e' te', s = (State e te c) /\
+  s' = (State e' te' c) ->
+  e' = e /\ te' = te /\ m' = m.
+Proof.
+Admitted.
+ 
+Lemma star_skip_elim:
+  forall ge e te c m e' te' m',
+  star ge (State e te (Kseq Sskip :: c)) m (State e' te' c) m' ->
+  e' = e /\ te' = te /\ m' = m.
+Proof.
+  intros.
+  inverts H as Step Star; subst.
+  - eapply blah in Step. inversion Step.
+  - remember (State e te (Kseq Sskip :: c)) as s.
+    remember (State e' te' c) as s'.
+    induction Step; subst; inverts Heqs.
+(* ugh. from Step and Star conclude star from c to c,
+        use that to conclude the equalities. *)
+Admitted.
+  
 Lemma ifc_skip{T: Type}:
   forall Delta P N A,
   ifc_def T Delta P N A Sskip (inormal_ret_assert P) N A.
@@ -269,8 +306,9 @@ Proof.
     eapply semax_SC_field_store_without_paths; eauto.
   - unfold ifc_core. unfold simple_ifc.
     introv Sat Sat' SE HE Star Star'.
-    (* OK, now how to reason forward using bigstep_assign? *)
     eapply bigstep_sassign in Star.
+    Search corestepN.
+    inversion Star.
     (* OK now have semantic information about the effect
        of the store statement which we need to use to
        prove the infoflow conditions *)

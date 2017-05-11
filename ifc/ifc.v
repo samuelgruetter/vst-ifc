@@ -69,19 +69,19 @@ Definition heap_access(m: mem)(l: heap_loc): memval :=
 
 Definition heap_lo_equiv(m1 m2: mem)(A1 A2: heap_clsf): Prop :=
   gen_lo_equiv A1 A2 (heap_access m1) (heap_access m2).
-
+  
 Definition simple_ifc {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
   (postP: A -> state_pred) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
 := forall (x x': A) (ge: genv) (e1 e1' e2 e2': env) (te1 te1' te2 te2': temp_env)
-          (m1 m1' m2 m2': mem),
+          (m1 m1' m2 m2': mem) (c' : cont),
    preP x  e1 te1 m1 ->
    preP x' e1' te1' m1' ->
-   let s1  := (State e1  te1  [Kseq c]) in
-   let s1' := (State e1' te1' [Kseq c]) in
-   let s2  := (State e2  te2  nil) in
-   let s2' := (State e2' te2' nil) in
+   let s1  := (State e1  te1  (cons (Kseq c) c')) in
+   let s1' := (State e1' te1' (cons (Kseq c) c')) in
+   let s2  := (State e2  te2  c') in
+   let s2' := (State e2' te2' c') in
    stack_lo_equiv s1 s1' (preN x) (preN x') ->
    heap_lo_equiv m1 m1' (preA x) (preA x') ->
    star ge s1  m1  s2  m2 ->
@@ -211,9 +211,9 @@ Definition ifc_body
   end.
 
 (* TODO connect this to the actual VST soundness proof *)
-Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2,
+Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 c',
   semax Delta P1 c P2 ->
   forall ge e1 te1 m1 e2 te2 m2,
   VST_pre_to_state_pred P1 e1 te1 m1 ->
-  star ge (State e1 te1 [Kseq c]) m1 (State e2 te2 nil) m2 ->
+  star ge (State e1 te1 (cons (Kseq c) c')) m1 (State e2 te2 c') m2 ->
   VST_post_to_state_pred P2 e2 te2 m2.
