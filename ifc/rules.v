@@ -202,24 +202,19 @@ end.
           executions over the semantics we're using so we
           don't have to reinvent the wheel *)
 Lemma bigstep_null:
-    forall ge s s' e te e' te' m m' c',
-    star ge s m s' m' ->
-    s = (State e te []) ->
-    s' = (State e' te' c') ->
+    forall ge e te e' te' m m' c',
+    star ge (State e te []) m (State e' te' c') m' ->
     m' = m /\ e' = e /\ te' = te /\ c' = [].
 Proof.
   intros.
   inversion H; subst.
-  - inversion H4.
-    auto.
-  - inversion H2.
+  - auto.
+  - inversion H0.
 Qed.
 
 Lemma bigstep_sassign:
-    forall ge s s' e te e1 e2 m e' te' m', 
-    star ge s m s' m' ->
-    s = (State e te [Kseq (Sassign e1 e2)]) ->
-    s' = (State e' te' []) ->
+    forall ge e te e1 e2 m e' te' m', 
+    star ge (State e te [Kseq (Sassign e1 e2)]) m (State e' te' []) m' ->
     exists loc ofs v1 v2, 
       Clight.eval_lvalue ge e te m e1 loc ofs /\
       type_is_volatile (typeof e1) = false /\
@@ -229,11 +224,10 @@ Lemma bigstep_sassign:
 Proof.
   intros.
   inversion H; subst.
-  - inversion H4.
-  - inversion H2; subst.
-    eapply bigstep_null in H3; try reflexivity.
-    destruct H3 as [? [? [? ?]]]. subst.
-    do 4 eexists. eauto.
+  inversion H0; subst.
+  eapply bigstep_null in H1.
+  destruct H1 as [? [? [? ?]]]. subst.
+  do 4 eexists. eauto.
 Qed.
 
 Lemma ifc_store{T: Type}:
@@ -276,7 +270,7 @@ Proof.
   - unfold ifc_core. unfold simple_ifc.
     introv Sat Sat' SE HE Star Star'.
     (* OK, now how to reason forward using bigstep_assign? *)
-    eapply bigstep_sassign in Star; [ | reflexivity | reflexivity ].
+    eapply bigstep_sassign in Star.
     (* OK now have semantic information about the effect
        of the store statement which we need to use to
        prove the infoflow conditions *)
