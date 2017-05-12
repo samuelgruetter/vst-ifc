@@ -115,7 +115,7 @@ Proof.
     + right. edestruct IHe2. eauto.
     + left. edestruct IHe1. eauto.
     + left. edestruct IHe1. eauto.
-  - destr1. unfold max_oclsf.
+  - destr1.
     destruct (clsf_expr N as_lvalue e1) eqn: E1;
     destruct (clsf_expr N as_lvalue e2) eqn: E2;
     try reflexivity.

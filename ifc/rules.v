@@ -310,7 +310,7 @@ Lemma ifc_store{T: Type}:
                            (LOCALx (Q x)
                            (SEPx (replace_nth n (R x) (data_at sh t (v_new x) (p x)))))))
         (N x)
-        (fun loc => if heap_loc_eq_val loc (p x) then max_clsf (l1 x) (l2 x) else A x loc).
+        (fun loc => if heap_loc_eq_val loc (p x) then lub (l1 x) (l2 x) else A x loc).
 Proof.
   introv EqT ByVal Volatile GetR Eval1 Eval2 JM Wsh Tc Ifc.
   unfold ifc_def. split.

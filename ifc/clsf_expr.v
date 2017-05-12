@@ -1,16 +1,5 @@
 From compcert Require Export Clightdefs.
-
-Inductive label : Set := Lo | Hi.
-
-Definition max_clsf(l1 l2: label): label := match l1 with
-  | Lo => l2
-  | Hi => Hi
-  end.
-
-Definition max_oclsf(l1 l2: option label): option label := match l1, l2 with
-  | Some l3, Some l4 => Some (max_clsf l3 l4)
-  | _, _ => None
-  end.
+Require Export ifc.lattice.
 
 Definition stack_clsf := ident -> label.
 
@@ -41,7 +30,7 @@ Fixpoint clsf_expr(N: stack_clsf)(as_lvalue: bool)(e: expr): option label := mat
   | Ederef e1 t => if as_lvalue then clsf_expr N true e1 else None
   | Eaddrof e1 _ => clsf_expr N true e1
   | Eunop _ e1 _ => clsf_expr N as_lvalue e1
-  | Ebinop _ e1 e2 _ => max_oclsf (clsf_expr N as_lvalue e1) (clsf_expr N as_lvalue e2)
+  | Ebinop _ e1 e2 _ => lub (clsf_expr N as_lvalue e1) (clsf_expr N as_lvalue e2)
   | Ecast e1 _ => clsf_expr N as_lvalue e1
   | Efield e1 _ t => if as_lvalue || is_array_type t then clsf_expr N true e1 else None
   (* These two only contain types, therefore Lo *)
