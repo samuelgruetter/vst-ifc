@@ -114,7 +114,8 @@ Lemma star_null:
   s' = (State e' te' c) ->
   e' = e /\ te' = te /\ m' = m.
 Proof.
-Admitted.
+Admitted. (* TODO: Not sure that this is true: if I have a while loop for instance,
+what does the semantics do? *)
  
 Lemma star_skip_elim:
   forall ge e te c m e' te' m',
@@ -138,7 +139,14 @@ Proof.
   intros. unfold ifc_def, ifc_core, simple_ifc. split.
   - intro x. apply semax_skip.
   - introv Sat Sat' SE HE Star Star'.
-Admitted.
+    eapply star_skip_elim in Star. destruct Star as [? [? ?]]; subst.
+    eapply star_skip_elim in Star'. destruct Star' as [? [? ?]]; subst.
+    split.
+    + unfold stack_lo_equiv.
+      unfold stack_lo_equiv in SE.
+      apply SE.
+    + apply HE.
+Qed.
 
 Lemma ifc_seq_skip{T: Type}:
   forall Delta P N A c P' N' A',
@@ -252,8 +260,8 @@ Proof.
 Qed.
 
 Lemma bigstep_sassign:
-    forall ge e te e1 e2 m e' te' m', 
-    star ge (State e te [Kseq (Sassign e1 e2)]) m (State e' te' []) m' ->
+    forall ge e te e1 e2 m e' te' m' k, 
+    star ge (State e te (cons (Kseq (Sassign e1 e2)) k)) m (State e' te' k) m' ->
     exists loc ofs v1 v2, 
       Clight.eval_lvalue ge e te m e1 loc ofs /\
       type_is_volatile (typeof e1) = false /\
@@ -262,10 +270,12 @@ Lemma bigstep_sassign:
       Cop.sem_cast v2 (typeof e2) (typeof e1) m = Some v1.
 Proof.
   intros.
-  inversion H; subst.
-  inversion H0; subst.
-  eapply bigstep_null in H1.
-  destruct H1 as [? [? [? ?]]]. subst.
+  inverts H as Step Star.
+  - exfalso. eapply blah. apply Step.
+  - inverts Step.
+    eapply star_null in Star.
+    2: auto.
+    destruct Star as [? [? ?]]; subst.
   do 4 eexists. eauto.
 Qed.
 
@@ -308,8 +318,10 @@ Proof.
     eapply semax_SC_field_store_without_paths; eauto.
   - unfold ifc_core. unfold simple_ifc.
     introv Sat Sat' SE HE Star Star'.
-    (* eapply bigstep_sassign in Star.
-    inversion Star. *)
+    eapply bigstep_sassign in Star.
+    destruct Star as [loc [ofs [v1 [v2 [HEval1 [HVolatile [HEval2 [HALoc HCast]]]]]]]].
+    eapply bigstep_sassign in Star'.
+    destruct Star' as [loc' [ofs' [v1' [v2' [HEval1' [HVolatile' [HEval2' [HALoc' HCast']]]]]]]].
     (* OK now have semantic information about the effect
        of the store statement which we need to use to
        prove the infoflow conditions *)
