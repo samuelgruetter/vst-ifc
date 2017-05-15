@@ -103,7 +103,6 @@ Proof.
   end.
 
   evar (newN: MyMetaVars -> stack_clsf).
-  evar (newA: MyMetaVars -> heap_clsf).
   eapply ifc_seq' with
     (P2 := fun x => (PROP (x.(b) = Int.zero \/ x.(b) = Int.one)
      LOCAL (temp _v (Vint x.(v)); temp _b (Vint x.(b));
@@ -114,7 +113,10 @@ Proof.
        data_at Ews tint (if Int.eq x.(b) Int.zero then Vint x.(v) else Vundef) x.(lowptr))
      ))
     (N2 := newN)
-    (A2 := newA); subst newN newA.
+    (A2 := (fun (x: MyMetaVars) (loc: heap_loc) =>
+          if heap_loc_eq_val loc x.(lowptr) then Lo
+     else if heap_loc_eq_val loc x.(highptr) then Hi
+     else Hi)); subst newN.
   {
   (* Note: even though the precondition is not explicitly written in the form
      "fun x: MyMetaVars => PROP (P x) LOCAL (Q x) SEP (R x)", where P, Q, R are functions, but
@@ -152,21 +154,28 @@ Proof.
         entailer!.
     } {
       simpl update_tycon. simpl. unfold inormal_ret_assert.
-      eapply ifc_pre; [ | eapply ifc_skip ]. intro.
-      Intros. clear H0. rewrite H.
-      entailer!.
-    }
-  } {
-  eapply ifc_pre; [ | eapply ifc_return ]. intro.
-  entailer!.
-  (* Now we have to prove that the calculated stack and heap classification corresponds to the
-     postconditions given in the funspec: *)
-  split.
-  - (* heap: *)
-    intro. destruct (heap_loc_eq_val l x.(lowptr)); reflexivity.
-  - (* stack: *)
-    intro. (* TODO now _v and _b should be "gone"! *)
-    (* TODO ifc_pre should use "less than" rather than equality in classifications *)
-    admit.
+      eapply ifc_pre; [ | | eapply ifc_skip ].
+      - intro. destruct (Int.eq x.(b) Int.zero) eqn: E.
+        + rewrite E. entailer!.
+        + Intros. rewrite H in E. rewrite Int.eq_true in E. discriminate.
+      - intro. (* TODO floyd make "Intros." work here. *)
+        rewrite <- TT_andp at 1. repeat (simple apply derives_extract_PROP; intro).
+        apply prop_right. split.
+        + apply lle_refl.
+        + apply lle_pointwise. intro loc.
+          destruct (heap_loc_eq_val loc x.(lowptr)) eqn: E.
+          * unfold typed_false in H. simpl in H. inversion H. unfold negb in H2.
+            destruct (Int.eq x.(b) Int.zero) eqn: E2.
+            { apply lle_refl. }
+            { discriminate. }
+          * apply lle_refl.
+  } } {
+  eapply ifc_pre; [ | | eapply ifc_return ].
+  - intro. entailer!.
+  - intro. apply prop_right. split.
+    + change (fun _ : ident => Hi) 
+      with (@top (ident -> lattice.label) (@LiftLattice ident lattice.label LoHi)).
+      apply lle_top.
+    + apply lle_refl.
   }
-Admitted.
+Qed.

@@ -191,33 +191,26 @@ Proof.
 Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
-  (forall x, ENTAIL Delta, P1 x |-- P1' x &&
-                                    !! (forall i, N1 x i = N1' x i) &&
-                                    !! (forall l, A1 x l = A1' x l)) ->
+  (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
+  (forall x, P1 x |-- !! (lle (N1 x) (N1' x) /\ lle (A1 x) (A1' x))) ->
   ifc_def T Delta P1' N1' A1' c P2 N2 A2 ->
   ifc_def T Delta P1  N1  A1  c P2 N2 A2.
 Proof.
-  introv Imp H.
-  assert (forall x, ENTAIL Delta, P1 x |-- P1' x) as E. {
-    intro x. eapply derives_trans; [ apply Imp | ]. do 2 apply andp_left1. apply derives_refl.
-  }
- split_ifc_hyps. split.
+  introv E Imp H.
+  split_ifc_hyps. split.
   - intro. apply semax_pre with (P' := P1' x); auto.
   - unfold ifc_core, simple_ifc in *.
-    introv Sat Sat' SE HE.
-    apply VST_pre_to_state_pred_commutes_imp' with (Delta := Delta) (P' := P1' x ) in Sat;
-      [ | apply E ].
-    apply VST_pre_to_state_pred_commutes_imp' with (Delta := Delta) (P' := P1' x') in Sat';
-      [ | apply E ].
+    introv Sat Sat' SE HE. 
+    pose proof (VST_pre_to_state_pred_commutes_imp' _ _ _ (E x) _ _ _ Sat) as Sat0.
+    pose proof (VST_pre_to_state_pred_commutes_imp' _ _ _ (E x') _ _ _ Sat') as Sat'0.
+    pose proof (VST_pre_to_state_pred_commutes_imp _ _ (Imp x) _ _ _ Sat) as Sat00.
+    pose proof (VST_pre_to_state_pred_commutes_imp _ _ (Imp x') _ _ _ Sat') as Sat'00.
+    apply VST_indep_state_pred in Sat00. destruct Sat00 as [LeA LeN].
+    apply VST_indep_state_pred in Sat'00. destruct Sat'00 as [LeA' LeN'].
     apply* Hi.
-    + replace (N1' x) with (N1 x).
-      replace (N1' x') with (N1 x').
-      assumption.
-      (* These follow from Imp, modulo incompatibility with VST *)
-      extensionality. admit.
-      extensionality. admit.
-    + admit. (* similar *)
-Admitted.
+    + apply* weaken_stack_lo_equiv.
+    + apply* weaken_heap_lo_equiv.
+Qed.
 
 (*
 Definition upd_stack_clsf(N: stack_clsf)(i: ident)(l: label): stack_clsf :=

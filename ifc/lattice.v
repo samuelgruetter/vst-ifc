@@ -1,5 +1,7 @@
 Require Import msl.Extensionality.
 
+(* https://en.wikipedia.org/wiki/Lattice_(order) *)
+
 Class Lattice (A: Type) := mkLattice {
   top : A;
   bot : A;
@@ -60,6 +62,41 @@ Proof. intro. rewrite lub_commut. apply lub_top_l. Qed.
 Lemma glb_bot_r : forall (a: A), glb a bot = bot.
 Proof. intro. rewrite glb_commut. apply glb_bot_l. Qed. 
 
+(* "lattice-lessthan-or-equal" *)
+Definition lle(a b: A): Prop := b = lub a b.
+
+Lemma double_lle_eq: forall (a b: A), lle a b -> lle b a -> a = b.
+Proof.
+  intros a b Le1 Le2. unfold lle in *. rewrite Le1. rewrite lub_commut. apply Le2.
+Qed.
+
+Lemma lle_lub_l: forall (a b: A), lle a (lub a b).
+Proof.
+  intros. unfold lle. rewrite lub_assoc. rewrite lub_idempotent. reflexivity.
+Qed.
+
+Lemma lle_lub_r: forall (a b: A), lle b (lub a b).
+Proof.
+  intros. unfold lle. rewrite lub_commut. rewrite lub_assoc. rewrite lub_idempotent. reflexivity.
+Qed.
+
+Lemma lle_bot_inv: forall (a: A), lle a bot -> a = bot.
+Proof. intros. unfold lle in *. rewrite H. symmetry. apply lub_bot_r. Qed.
+
+Lemma lub_bot_inv: forall (a b: A), lub a b = bot -> a = bot /\ b = bot.
+Proof.
+  intros.
+  pose proof (lle_lub_l a b) as C. rewrite H in C. apply lle_bot_inv in C.
+  pose proof (lle_lub_r a b) as D. rewrite H in D. apply lle_bot_inv in D.
+  apply (conj C D).
+Qed.
+
+Lemma lle_top: forall (a: A), lle a top.
+Proof. intro. unfold lle. symmetry. apply lub_top_r. Qed.
+
+Lemma lle_refl: forall (a: A), lle a a.
+Proof. intro. unfold lle. symmetry. apply lub_idempotent. Qed.
+
 End LatticeFacts.
 
 
@@ -112,6 +149,21 @@ Eval simpl in (lub (fun (x: nat) (i: nat*nat) => Lo) (fun (x: nat) (i: nat*nat) 
 
 Including all the lemmas!
 *)
+
+Section LiftLatticeFacts.
+
+Context {T: Type}.
+Context {A: Type}.
+Context {LA: Lattice A}.
+
+Lemma lle_pointwise: forall (f1 f2: T -> A), lle f1 f2 <-> forall (x: T), lle (f1 x) (f2 x).
+Proof.
+  split.
+  - intros. unfold lle in *. pose proof (equal_f H) as C. apply C.
+  - intro. unfold lle in *. extensionality. apply H.
+Qed.
+
+End LiftLatticeFacts.
 
 (* Basically just a lattice on A, but with an additional element "None" sitting on top
    of the whole lattice.

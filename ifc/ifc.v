@@ -1,5 +1,6 @@
 (* In this file, P, N, A are separate, rather than a triple *)
 
+Require Export lib.LibTactics.
 Require Export compcert.cfrontend.Clight.
 Require Export veric.Clight_new.
 Require Export compcert.lib.Maps. (* for PMap and ZMap *)
@@ -11,6 +12,8 @@ Require Export floyd.base.
 Require Export floyd.canon.
 Require Export ifc.clsf_expr.
 Require Import List. Import ListNotations.
+
+Local Open Scope logic.
 
 Definition simplestate := (corestate * mem)%type.
 
@@ -37,6 +40,9 @@ Axiom VST_pre_to_state_pred_commutes_imp': forall Delta P P',
   (ENTAIL Delta, P |-- P') ->
   (forall e te m, VST_pre_to_state_pred P e te m -> VST_pre_to_state_pred P' e te m).
 
+Axiom VST_indep_state_pred: forall P e te m,
+  VST_pre_to_state_pred (!! P) e te m -> P.
+
 Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=
   | star_refl: forall s m,
       star ge s m s m
@@ -49,6 +55,21 @@ Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=
 Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
   forall (l: Loc), f1 l = Lo -> f2 l = Lo -> s1 l = s2 l.
 
+Lemma weaken_gen_lo_equiv{Loc V: Type}: forall (s1 s2: Loc -> V) (f1 f1' f2 f2': Loc -> label),
+  lle f1 f1' ->
+  lle f2 f2' ->
+  gen_lo_equiv f1 f2 s1 s2 ->
+  gen_lo_equiv f1' f2' s1 s2.
+Proof.
+  introv Le1 Le2 LoE. unfold gen_lo_equiv in *. unfold lle in *.
+  intros l E1 E2.
+  pose proof (equal_f Le1 l) as Le1'. rewrite Le1' in E1.
+  pose proof (lub_bot_inv (f1 l) (f1' l) E1) as C1. destruct C1 as [C1 _].
+  pose proof (equal_f Le2 l) as Le2'. rewrite Le2' in E2.
+  pose proof (lub_bot_inv (f2 l) (f2' l) E2) as C2. destruct C2 as [C2 _].
+  apply LoE; assumption.
+Qed.
+
 (* ExtCall not considered currently *)
 Definition stack_lo_equiv(s1 s2: corestate)(N1 N2: stack_clsf): Prop :=
   match s1, s2 with
@@ -56,6 +77,18 @@ Definition stack_lo_equiv(s1 s2: corestate)(N1 N2: stack_clsf): Prop :=
      e1 = e2 /\ gen_lo_equiv N1 N2 (fun i => te1 ! i) (fun i => te2 ! i)
   | _, _ => False
   end.
+
+Lemma weaken_stack_lo_equiv: forall (s1 s2: corestate) (N1 N1' N2 N2': stack_clsf),
+  lle N1 N1' ->
+  lle N2 N2' ->
+  stack_lo_equiv s1 s2 N1 N2 ->
+  stack_lo_equiv s1 s2 N1' N2'.
+Proof.
+  introv Le1 Le2 SE. unfold stack_lo_equiv in *.
+  destruct s1 as [e1 te1 k1 | _]; destruct s2 as [e2 te2 k2 | _]; try assumption.
+  destruct SE as [Eq GE]. apply (conj Eq).
+  eapply weaken_gen_lo_equiv; eassumption.
+Qed.
 
 Lemma stack_lo_equiv_change_cmd: forall e1 te1 c1 e2 te2 c2 c1' c2' N1 N2,
   stack_lo_equiv (State e1 te1 c1 ) (State e2 te2 c2 ) N1 N2 ->
@@ -69,7 +102,17 @@ Definition heap_access(m: mem)(l: heap_loc): memval :=
 
 Definition heap_lo_equiv(m1 m2: mem)(A1 A2: heap_clsf): Prop :=
   gen_lo_equiv A1 A2 (heap_access m1) (heap_access m2).
-  
+
+Lemma weaken_heap_lo_equiv: forall (m1 m2: mem) (A1 A1' A2 A2': heap_clsf),
+  lle A1 A1' ->
+  lle A2 A2' ->
+  heap_lo_equiv m1 m2 A1 A2 ->
+  heap_lo_equiv m1 m2 A1' A2'.
+Proof.
+  introv Le1 Le2 HE. unfold heap_lo_equiv in *.
+  eapply weaken_gen_lo_equiv; eassumption.
+Qed.
+
 Definition simple_ifc {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
