@@ -8,6 +8,8 @@ Require Export compcert.common.Events.
 Require Export compcert.lib.Integers.
 Require Export compcert.common.Values.
 Require Export compcert.common.Memory.
+Require Export sepcomp.semantics.
+Require Export sepcomp.semantics_lemmas.
 Require Export floyd.base.
 Require Export floyd.canon.
 Require Export ifc.clsf_expr.
@@ -43,13 +45,8 @@ Axiom VST_pre_to_state_pred_commutes_imp': forall Delta P P',
 Axiom VST_indep_state_pred: forall P e te m,
   VST_pre_to_state_pred (!! P) e te m -> P.
 
-Inductive star (ge: genv): corestate -> mem -> corestate -> mem -> Prop :=
-  | star_refl: forall s m,
-      star ge s m s m
-  | star_step: forall s1 m1 s2 m2 s3 m3,
-      cl_step ge s1 m1 s2 m2 ->
-      star ge s2 m2 s3 m3 ->
-      star ge s1 m1 s3 m3.
+Definition stepN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
+  corestepN cl_core_sem.
 
 (* general low-equivalence *)
 Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
@@ -117,19 +114,24 @@ Definition simple_ifc {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
   (postP: A -> state_pred) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
-:= forall (x x': A) (ge: genv) (e1 e1' e2 e2': env) (te1 te1' te2 te2': temp_env)
-          (m1 m1' m2 m2': mem) (c' : cont),
-   preP x  e1 te1 m1 ->
+:= forall (x x': A) (ge: genv) (n: nat) (e1 e1' e2: env) (te1 te1' te2: temp_env)
+          (m1 m1' m2: mem) (k : cont),
+   preP x  e1  te1  m1 ->
    preP x' e1' te1' m1' ->
-   let s1  := (State e1  te1  (cons (Kseq c) c')) in
-   let s1' := (State e1' te1' (cons (Kseq c) c')) in
-   let s2  := (State e2  te2  c') in
-   let s2' := (State e2' te2' c') in
+   let s1  := (State e1  te1  (cons (Kseq c) k)) in
+   let s1' := (State e1' te1' (cons (Kseq c) k)) in
    stack_lo_equiv s1 s1' (preN x) (preN x') ->
    heap_lo_equiv m1 m1' (preA x) (preA x') ->
-   star ge s1  m1  s2  m2 ->
-   star ge s1' m1' s2' m2' ->
-   stack_lo_equiv s2 s2' (postN x) (postN x') /\ heap_lo_equiv m2 m2' (postA x) (postA x').
+   let s2  := (State e2 te2 k) in
+   stepN ge n s1 m1 s2 m2 ->
+   exists e2' te2' m2',
+   let s2' := (State e2' te2' k) in
+   stepN ge n s1' m1' s2' m2' /\
+   stack_lo_equiv s2 s2' (postN x) (postN x') /\
+   heap_lo_equiv m2 m2' (postA x) (postA x').
+(* How could we say anything about intermediate states?
+   postN and postA are only applicable to the state reached after executing all of c!
+   And if we allow n to be anything, it could also be too big, so that we run into k! *)
 
 Definition ifc_core {A: Type} (Delta: tycontext)
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -254,9 +256,9 @@ Definition ifc_body
   end.
 
 (* TODO connect this to the actual VST soundness proof *)
-Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 c',
+Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 c' n,
   semax Delta P1 c P2 ->
   forall ge e1 te1 m1 e2 te2 m2,
   VST_pre_to_state_pred P1 e1 te1 m1 ->
-  star ge (State e1 te1 (cons (Kseq c) c')) m1 (State e2 te2 c') m2 ->
+  stepN ge n (State e1 te1 (cons (Kseq c) c')) m1 (State e2 te2 c') m2 ->
   VST_post_to_state_pred P2 e2 te2 m2.
