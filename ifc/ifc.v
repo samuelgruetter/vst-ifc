@@ -10,6 +10,7 @@ Require Export compcert.common.Values.
 Require Export compcert.common.Memory.
 Require Export sepcomp.semantics.
 Require Export sepcomp.semantics_lemmas.
+Require Export veric.semax.
 Require Export floyd.base.
 Require Export floyd.canon.
 Require Export ifc.clsf_expr.
@@ -17,10 +18,21 @@ Require Import List. Import ListNotations.
 
 Local Open Scope logic.
 
-Definition simplestate := (corestate * mem)%type.
+Definition stack_clsf := ident -> label.
+
+Definition ret_stack_clsf := exitkind -> option val -> stack_clsf.
+
+Definition heap_loc := (positive * int)%type. (* block id and offset *)
+
+Definition heap_clsf := heap_loc -> label.
+
+Definition ret_heap_clsf := exitkind -> option val -> heap_clsf.
 
 (* TODO this should match VST, i.e. we should have "state_pred = environ->mpred" for preconditions,
-   and for postconditions, it's ret_assert in VST *)
+   and for postconditions, it's ret_assert in VST
+   TODO or as a first step, maybe use environ instead of env and temp_env, and
+   construct_rho: genviron -> env -> temp_env -> environ
+ *)
 Definition state_pred := env -> temp_env -> mem -> Prop.
 
 Definition pre_assert := environ -> mpred.
@@ -45,8 +57,8 @@ Axiom VST_pre_to_state_pred_commutes_imp': forall Delta P P',
 Axiom VST_indep_state_pred: forall P e te m,
   VST_pre_to_state_pred (!! P) e te m -> P.
 
-Definition stepN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
-  corestepN cl_core_sem.
+Definition star: genv -> corestate -> mem -> corestate -> mem -> Prop :=
+  corestep_star cl_core_sem.
 
 (* general low-equivalence *)
 Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
@@ -110,41 +122,47 @@ Proof.
   eapply weaken_gen_lo_equiv; eassumption.
 Qed.
 
+Definition same_Noneness{T: Type}(o1 o2: option T): Prop :=
+  (o1 = None /\ o2 = None) \/ exists v1 v2, o1 = Some v1 /\ o2 = Some v2.
+
 Definition simple_ifc {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
-  (postP: A -> state_pred) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
-:= forall (x x': A) (ge: genv) (n: nat) (e1 e1' e2: env) (te1 te1' te2: temp_env)
-          (m1 m1' m2: mem) (k : cont),
-   preP x  e1  te1  m1 ->
+  (postN: A -> ret_stack_clsf) (postA: A -> ret_heap_clsf)
+:= forall (x x': A) (ge: genv) (e1 e1' e2 e2': env) (te1 te1' te2 te2': temp_env)
+          (m1 m1' m2 m2': mem) (k : cont) (ek ek': exitkind) (vl vl': option val),
+   preP x  e1 te1 m1 ->
    preP x' e1' te1' m1' ->
    let s1  := (State e1  te1  (cons (Kseq c) k)) in
    let s1' := (State e1' te1' (cons (Kseq c) k)) in
+   let s2  := (State e2  te2  (exit_cont ek  vl  k)) in
+   let s2' := (State e2' te2' (exit_cont ek' vl' k)) in
    stack_lo_equiv s1 s1' (preN x) (preN x') ->
-   heap_lo_equiv m1 m1' (preA x) (preA x') ->
-   let s2  := (State e2 te2 k) in
-   stepN ge n s1 m1 s2 m2 ->
-   exists e2' te2' m2',
-   let s2' := (State e2' te2' k) in
-   stepN ge n s1' m1' s2' m2' /\
-   stack_lo_equiv s2 s2' (postN x) (postN x') /\
-   heap_lo_equiv m2 m2' (postA x) (postA x').
-(* How could we say anything about intermediate states?
+   heap_lo_equiv  m1 m1' (preA x) (preA x') ->
+   star ge s1  m1  s2  m2 ->
+   star ge s1' m1' s2' m2' ->
+   ek = ek' /\ same_Noneness vl vl' /\
+   stack_lo_equiv s2 s2' (postN x ek vl) (postN x' ek' vl') /\
+   heap_lo_equiv  m2 m2' (postA x ek vl) (postA x' ek' vl').
+
+(* TODO Could it happen that (exit_cont ek  vl  k) takes some steps involving a while loop and
+   modifying some values and classifications and ends up in exactly (exit_cont ek  vl  k) again? *)
+(* TODO How could we say anything about intermediate states?
    postN and postA are only applicable to the state reached after executing all of c!
    And if we allow n to be anything, it could also be too big, so that we run into k! *)
 
 Definition ifc_core {A: Type} (Delta: tycontext)
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
-  (postP: A -> ret_assert) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
+  (postP: A -> ret_assert) (postN: A -> ret_stack_clsf) (postA: A -> ret_heap_clsf)
 := let preP'  := fun (x: A) => VST_pre_to_state_pred (preP x) in
    let postP' := fun (x: A) => VST_post_to_state_pred (postP x) in
-   simple_ifc Delta preP' preN preA c postP' postN postA.
+   simple_ifc Delta preP' preN preA c postN postA.
 
 Definition ifc_def (A: Type) {cs: compspecs} {Espec: OracleKind} (Delta: tycontext)
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
-  (postP: A -> ret_assert) (postN: A -> stack_clsf) (postA: A -> heap_clsf)
+  (postP: A -> ret_assert) (postN: A -> ret_stack_clsf) (postA: A -> ret_heap_clsf)
 := (forall x: A, @semax cs Espec Delta (preP x) c (postP x)) /\
    (ifc_core Delta preP preN preA c postP postN postA).
 
@@ -185,8 +203,8 @@ Record ifc_funspec: Type := mk_ifc_funspec {
   functional_spec : (ident * funspec)%type;
   ifc_stack_pre   : (WITHclause_type functional_spec) -> stack_clsf;
   ifc_heap_pre    : (WITHclause_type functional_spec) -> heap_clsf;
-  ifc_stack_post  : (WITHclause_type functional_spec) -> stack_clsf;
-  ifc_heap_post   : (WITHclause_type functional_spec) -> heap_clsf
+  ifc_stack_post  : (WITHclause_type functional_spec) -> ret_stack_clsf;
+  ifc_heap_post   : (WITHclause_type functional_spec) -> ret_heap_clsf
 }.
 
 Local Open Scope logic.
@@ -203,7 +221,7 @@ Definition vst_fun_assert (T: Type): Type :=
 Definition ifc_body00 (V: varspecs) (G: funspecs) (C: compspecs) (f: function)
   (T: Type)
   (P : vst_fun_assert T) (N : T -> stack_clsf) (A : T -> heap_clsf)
-  (P': vst_fun_assert T) (N': T -> stack_clsf) (A': T -> heap_clsf)
+  (P': vst_fun_assert T) (N': T -> ret_stack_clsf) (A': T -> ret_heap_clsf)
 : Prop :=
   forall Espec ts,
     @ifc_def T C Espec (func_tycontext f V G)
@@ -232,8 +250,8 @@ Definition ifc_body0 (V : varspecs) (G : funspecs) (C : compspecs) (f : function
   (P_ne : super_non_expansive P) (Q_ne : super_non_expansive P')
   (N  : WITHclause_type (i, mk_funspec fsig c T0 P P' P_ne Q_ne) -> stack_clsf)
   (A  : WITHclause_type (i, mk_funspec fsig c T0 P P' P_ne Q_ne) -> heap_clsf)
-  (N' : WITHclause_type (i, mk_funspec fsig c T0 P P' P_ne Q_ne) -> stack_clsf)
-  (A' : WITHclause_type (i, mk_funspec fsig c T0 P P' P_ne Q_ne) -> heap_clsf)
+  (N' : WITHclause_type (i, mk_funspec fsig c T0 P P' P_ne Q_ne) -> ret_stack_clsf)
+  (A' : WITHclause_type (i, mk_funspec fsig c T0 P P' P_ne Q_ne) -> ret_heap_clsf)
 : Prop := 
   match T0 as t return
     (let T := force_const_type t in (forall
@@ -242,8 +260,8 @@ Definition ifc_body0 (V : varspecs) (G : funspecs) (C : compspecs) (f : function
      super_non_expansive P'0 ->
      (T -> stack_clsf) ->
      (T -> heap_clsf) ->
-     (T -> stack_clsf) ->
-     (T -> heap_clsf) -> Prop))
+     (T -> ret_stack_clsf) ->
+     (T -> ret_heap_clsf) -> Prop))
   with
   | ConstType T => fun P0 P'0 _ _ N0 A0 N'0 A'0 => ifc_body00 V G C f T P0 N0 A0 P'0 N'0 A'0
   | _ => fun _ _ _ _ _ _ _ _  => False
@@ -256,9 +274,9 @@ Definition ifc_body
   end.
 
 (* TODO connect this to the actual VST soundness proof *)
-Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 c' n,
+Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 c',
   semax Delta P1 c P2 ->
   forall ge e1 te1 m1 e2 te2 m2,
   VST_pre_to_state_pred P1 e1 te1 m1 ->
-  stepN ge n (State e1 te1 (cons (Kseq c) c')) m1 (State e2 te2 c') m2 ->
+  star ge (State e1 te1 (cons (Kseq c) c')) m1 (State e2 te2 c') m2 ->
   VST_post_to_state_pred P2 e2 te2 m2.

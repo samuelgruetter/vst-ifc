@@ -1,12 +1,6 @@
 From compcert Require Export Clightdefs.
 Require Export ifc.lattice.
 
-Definition stack_clsf := ident -> label.
-
-Definition heap_loc := (positive * int)%type. (* block id and offset *)
-
-Definition heap_clsf := heap_loc -> label.
-
 Local Open Scope bool.
 
 Definition is_array_type(t: type): bool := match t with
@@ -16,7 +10,7 @@ Definition is_array_type(t: type): bool := match t with
 
 (* Only accepts expressions without memory access -- otherwise it returns None.
    Inspired by no_loads_expr in examples/expr_test.v *)
-Fixpoint clsf_expr(N: stack_clsf)(as_lvalue: bool)(e: expr): option label := match e with
+Fixpoint clsf_expr(N: ident -> label)(as_lvalue: bool)(e: expr): option label := match e with
   | Econst_int _ _ => Some Lo
   | Econst_float _ _ => Some Lo
   | Econst_single _ _ => Some Lo
