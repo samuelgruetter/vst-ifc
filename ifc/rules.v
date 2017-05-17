@@ -229,6 +229,45 @@ Proof.
     (* how to express and use restriction that b must not depend on Hi data? *)
 Admitted.
 
+Lemma invert_star: forall ge s1 m1 s3 m3,
+  star ge s1 m1 s3 m3 ->
+  s1 = s3 /\ m1 = m3 \/ exists s2 m2, cl_step ge s1 m1 s2 m2 /\ star ge s2 m2 s3 m3.
+Proof.
+  introv Star. unfold star in Star. unfold corestep_star in Star. destruct Star as [n StepN].
+  destruct n as [|n].
+  - simpl in StepN. inversion StepN; subst. left. auto.
+  - simpl in StepN. right. destruct StepN as [s2 [m2 [Step Star]]].
+    unfold star. unfold corestep_star. eauto.
+Qed.
+
+Lemma invert_star_return: forall ge e1 te1 m1 e2 te2 m2 ek vl k retExpr,
+  star ge (State e1 te1 (Kseq (Sreturn retExpr) :: k)) m1
+          (State e2 te2 (exit_cont ek vl k)) m2 ->
+  exists k' te' ve' v' f optid te'' m11,
+    call_cont k = Kcall optid f ve' te' :: k' /\
+    Mem.free_list m1 (blocks_of_env ge e1) = Some m11 /\
+    match retExpr with
+     | Some a =>
+         exists v,
+         Clight.eval_expr ge e1 te1 m1 a v /\
+         Cop.sem_cast v (typeof a) (fn_return f) m1 = Some v'
+     | None => v' = Vundef
+     end /\
+    match optid with
+     | Some id => True /\ te'' = PTree.set id v' te'
+     | None => True /\ te'' = te'
+     end.
+Proof.
+  introv Star. apply invert_star in Star. destruct Star as [[Eqs Eqm] | [s11 [m11 [Step Star]]]].
+  - destruct ek; inversion Eqs; subst.
+    * exfalso. eapply blah. eassumption.
+    * admit. (* contradiction H2 *)
+    * admit. (* contradiction H2 *)
+    * admit. (* contradiction H2 *)
+  - inversion Step; subst.
+    repeat eexists; try eassumption.
+Qed.
+
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
         (retExpr: option expr) (retVal: option val),
@@ -259,6 +298,12 @@ Proof.
     }
     rewrite E in C. clear E. apply C.
   - introv Sat Sat' SE HE Star Star'.
+    apply invert_star_return in Star .
+    destruct Star as [k' [te' [ve' [v' [f' [optid' [te'' [m11 [Eqk [Ekm [EqRe EqO]]]]]]]]]]].
+    apply invert_star_return in Star'.
+    destruct Star' as
+      [k'0 [te'0 [ve'0 [v'0 [f'0 [optid'0 [te''0 [m110 [Eqk0 [Ekm0 [EqRe0 EqO0]]]]]]]]]]].
+    rewrite Eqk in Eqk0. inversion Eqk0. subst optid'0 f'0 ve'0 te'0 k'0. clear Eqk0.
     (* TODO... *)
 Admitted.
 

@@ -172,6 +172,8 @@ Definition simple_ifc {A : Type} (Delta: tycontext)
    stack_lo_equiv s2 s2' (postN x ek vl) (postN x' ek' vl') /\
    heap_lo_equiv  m2 m2' (postA x ek vl) (postA x' ek' vl').
 
+(* TODO How can we prove "ek = ek'"? It only holds if the executions never branch on high data,
+   but how can we add this requirement as a hypothesis? *)
 (* TODO Could it happen that (exit_cont ek  vl  k) takes some steps involving a while loop and
    modifying some values and classifications and ends up in exactly (exit_cont ek  vl  k) again? *)
 (* TODO How could we say anything about intermediate states?
