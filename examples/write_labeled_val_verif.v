@@ -55,9 +55,9 @@ Definition write_labeled_val_spec: ifc_funspec := {|
      else if heap_loc_eq_val loc x.(highptr) then Hi
      else Hi);
   ifc_stack_post :=
-    (fun (x: MyMetaVars) (i: ident) => Hi);
+    (fun (x: MyMetaVars) (ek: exitkind) (vl: option val) (i: ident) => Hi);
   ifc_heap_post :=
-    (fun (x: MyMetaVars) (loc: heap_loc) =>
+    (fun (x: MyMetaVars) (ek: exitkind) (vl: option val) (loc: heap_loc) =>
           if heap_loc_eq_val loc x.(lowptr) then Lo
      else if heap_loc_eq_val loc x.(highptr) then Hi
      else Hi)
@@ -170,12 +170,13 @@ Proof.
             { discriminate. }
           * apply lle_refl.
   } } {
-  eapply ifc_pre; [ | | eapply ifc_return ].
+  eapply ifc_pre; [ | | eapply ifc_return with (retVal := None) ].
   - intro. entailer!.
   - intro. apply prop_right. split.
     + change (fun _ : ident => Hi) 
       with (@top (ident -> lattice.label) (@LiftLattice ident lattice.label LoHi)).
       apply lle_top.
     + apply lle_refl.
+  - reflexivity.
   }
 Qed.

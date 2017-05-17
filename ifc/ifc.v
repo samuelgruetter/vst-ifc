@@ -39,23 +39,50 @@ Definition pre_assert := environ -> mpred.
 (* "ret_assert := exitkind -> option val -> environ -> mpred" is already defined by VST *)
 
 (* TODO get rid of these *)
-Parameter VST_pre_to_state_pred : pre_assert -> state_pred.
-Parameter VST_post_to_state_pred : ret_assert -> state_pred.
+Parameter VST_to_state_pred : pre_assert -> state_pred.
+Definition VST_post_to_state_pred : ret_assert -> exitkind -> option val -> state_pred :=
+  fun R ek vl => VST_to_state_pred (R ek vl).
 
-(* TODO does not hold if exitkind is different from EK_normal *)
-Axiom VST_overridePost_to_state_pred: forall Q R,
-  VST_post_to_state_pred (overridePost Q R) = VST_pre_to_state_pred Q.
+Lemma VST_overridePost_to_state_pred00: forall Q R ek vl,
+  VST_to_state_pred (overridePost Q R ek vl) =
+  if eq_dec ek EK_normal
+  then VST_to_state_pred (fun rho : environ => !! (vl = None) && Q rho)
+  else VST_to_state_pred (R ek vl).
+Proof.
+  unfold overridePost. intros. destruct ek; reflexivity.
+Qed.
 
-Axiom VST_pre_to_state_pred_commutes_imp: forall P P',
+Axiom VST_to_state_pred_commutes_imp: forall P P',
   (P |-- P') ->
-  (forall e te m, VST_pre_to_state_pred P e te m -> VST_pre_to_state_pred P' e te m).
+  (forall e te m, VST_to_state_pred P e te m -> VST_to_state_pred P' e te m).
 
-Axiom VST_pre_to_state_pred_commutes_imp': forall Delta P P',
+Axiom VST_to_state_pred_commutes_imp': forall Delta P P',
   (ENTAIL Delta, P |-- P') ->
-  (forall e te m, VST_pre_to_state_pred P e te m -> VST_pre_to_state_pred P' e te m).
+  (forall e te m, VST_to_state_pred P e te m -> VST_to_state_pred P' e te m).
 
-Axiom VST_indep_state_pred: forall P e te m,
-  VST_pre_to_state_pred (!! P) e te m -> P.
+Axiom VST_indep_state_pred00: forall P e te m,
+  VST_to_state_pred (!! P) e te m -> P.
+
+Axiom VST_indep_state_pred: forall P,
+  VST_to_state_pred (!! P) = fun e te m => P.
+
+Axiom VST_to_state_pred_and: forall (P Q: environ -> mpred),
+  VST_to_state_pred (P && Q) = 
+  (fun e te m => VST_to_state_pred P e te m /\ VST_to_state_pred Q e te m).
+
+Lemma VST_overridePost_to_state_pred: forall Q R ek vl,
+  VST_to_state_pred (overridePost Q R ek vl) =
+  if eq_dec ek EK_normal
+  then fun e te m => vl = None /\ VST_to_state_pred Q e te m
+  else VST_to_state_pred (R ek vl).
+Proof.
+  unfold overridePost. intros. destruct ek; simpl; try reflexivity.
+  assert ((fun x : environ => !! (vl = None) && Q x) = !! (vl = None) && Q) as E. {
+    extensionality. reflexivity.
+  }
+  rewrite E. rewrite VST_to_state_pred_and. extensionality e. extensionality te. extensionality m.
+  rewrite VST_indep_state_pred. reflexivity.
+Qed.
 
 Definition star: genv -> corestate -> mem -> corestate -> mem -> Prop :=
   corestep_star cl_core_sem.
@@ -155,7 +182,7 @@ Definition ifc_core {A: Type} (Delta: tycontext)
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
   (postP: A -> ret_assert) (postN: A -> ret_stack_clsf) (postA: A -> ret_heap_clsf)
-:= let preP'  := fun (x: A) => VST_pre_to_state_pred (preP x) in
+:= let preP'  := fun (x: A) => VST_to_state_pred (preP x) in
    let postP' := fun (x: A) => VST_post_to_state_pred (postP x) in
    simple_ifc Delta preP' preN preA c postN postA.
 
@@ -274,9 +301,9 @@ Definition ifc_body
   end.
 
 (* TODO connect this to the actual VST soundness proof *)
-Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 c',
+Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 ek vl k,
   semax Delta P1 c P2 ->
   forall ge e1 te1 m1 e2 te2 m2,
-  VST_pre_to_state_pred P1 e1 te1 m1 ->
-  star ge (State e1 te1 (cons (Kseq c) c')) m1 (State e2 te2 c') m2 ->
-  VST_post_to_state_pred P2 e2 te2 m2.
+  VST_to_state_pred P1 e1 te1 m1 ->
+  star ge (State e1 te1 (cons (Kseq c) k)) m1 (State e2 te2 (exit_cont ek vl k)) m2 ->
+  VST_to_state_pred (P2 ek vl) e2 te2 m2.

@@ -12,19 +12,20 @@ Context (Espec : OracleKind).
 Context {CS: compspecs}.
 
 Lemma isequential'{T: Type}:
-  forall R Delta P N A c P' N' A',
-    ifc_def T Delta P N A c (inormal_ret_assert P') N' A' ->
-    ifc_def T Delta P N A c (ioverridePost P' R) N' A'.
+  forall R RN RA Delta P N A c P' N' A',
+    ifc_def T Delta P N A c (inormal_ret_assert P') (normalPostClsf N') (normalPostClsf A') ->
+    ifc_def T Delta P N A c (ioverridePost P' R) (overridePostClsf N' RN) (overridePostClsf A' RA).
 Proof.
   intros. unfold ifc_def. unfold ioverridePost. unfold inormal_ret_assert in *.
   split_ifc_hyps. split.
   - intro. apply canon.sequential'. apply Hs.
-  - unfold ifc_core, simple_ifc in *. assumption. (* note: ifc_core currently ignores postcondition *)
-Qed.
+  - unfold ifc_core, simple_ifc in *. unfold overridePostClsf in *.
+    (* TODO use VST to conclude that it's EK_normal and use this to simplify the goal *)
+Admitted.
 
 Lemma ifc_seq'{T: Type}:
  forall Delta P1 N1 A1 c1 P2 N2 A2 c2 P3 N3 A3,
-   ifc_def T Delta P1 N1 A1 c1 (inormal_ret_assert P2) N2 A2 ->
+   ifc_def T Delta P1 N1 A1 c1 (inormal_ret_assert P2) (normalPostClsf N2) (normalPostClsf A2) ->
    ifc_def T (update_tycon Delta c1) P2 N2 A2 c2 P3 N3 A3 ->
    ifc_def T Delta P1 N1 A1 (Ssequence c1 c2) P3 N3 A3.
 Proof.
@@ -40,7 +41,7 @@ Proof.
   introv Imp H. split_ifc_hyps. split.
   - intro. apply* semax_pre.
   - unfold ifc_core, simple_ifc in *. intros.
-    apply* Hi; apply* VST_pre_to_state_pred_commutes_imp'.
+    apply* Hi; apply* VST_to_state_pred_commutes_imp'.
 Qed.
 
 Lemma ifc_ifthenelse_PQR{T: Type}:
@@ -85,8 +86,8 @@ Proof.
   intros. split_ifc_hyps. unfold ifc_def, ifc_core, simple_ifc in *. split.
   - intro. apply* semax_later_trivial.
   - introv Sat Sat'.
-    apply VST_pre_to_state_pred_commutes_imp with (P' := (|> P x )) in Sat ; [ | apply now_later ].
-    apply VST_pre_to_state_pred_commutes_imp with (P' := (|> P x')) in Sat'; [ | apply now_later ].
+    apply VST_to_state_pred_commutes_imp with (P' := (|> P x )) in Sat ; [ | apply now_later ].
+    apply VST_to_state_pred_commutes_imp with (P' := (|> P x')) in Sat'; [ | apply now_later ].
     apply* Hi.
 Qed.
 
