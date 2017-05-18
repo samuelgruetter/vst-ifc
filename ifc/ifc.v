@@ -87,6 +87,9 @@ Qed.
 Definition star: genv -> corestate -> mem -> corestate -> mem -> Prop :=
   corestep_star cl_core_sem.
 
+Definition plus: genv -> corestate -> mem -> corestate -> mem -> Prop :=
+  corestep_plus cl_core_sem.
+
 (* general low-equivalence *)
 Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
   forall (l: Loc), f1 l = Lo -> f2 l = Lo -> s1 l = s2 l.
@@ -172,8 +175,6 @@ Definition simple_ifc {A : Type} (Delta: tycontext)
    stack_lo_equiv s2 s2' (postN x ek vl) (postN x' ek' vl') /\
    heap_lo_equiv  m2 m2' (postA x ek vl) (postA x' ek' vl').
 
-(* TODO How can we prove "ek = ek'"? It only holds if the executions never branch on high data,
-   but how can we add this requirement as a hypothesis? *)
 (* TODO Could it happen that (exit_cont ek  vl  k) takes some steps involving a while loop and
    modifying some values and classifications and ends up in exactly (exit_cont ek  vl  k) again? *)
 (* TODO How could we say anything about intermediate states?

@@ -231,6 +231,27 @@ Admitted.
 
 Lemma invert_star: forall ge s1 m1 s3 m3,
   star ge s1 m1 s3 m3 ->
+  s1 = s3 /\ m1 = m3 \/ plus ge s1 m1 s3 m3.
+Proof.
+  introv Star. unfold star in Star. unfold corestep_star in Star. destruct Star as [n StepN].
+  destruct n as [|n].
+  - simpl in StepN. inversion StepN; subst. left. auto.
+  - simpl in StepN. right. destruct StepN as [s2 [m2 [Step Star]]].
+    unfold plus. unfold corestep_plus. eexists. simpl. eauto.
+Qed.
+
+Lemma invert_plus: forall ge s1 m1 s3 m3,
+  plus ge s1 m1 s3 m3 ->
+  exists s2 m2, cl_step ge s1 m1 s2 m2 /\ star ge s2 m2 s3 m3.
+Proof.
+  introv Plus. unfold plus in Plus. unfold corestep_plus in Plus. destruct Plus as [n StepN].
+  simpl in StepN. destruct StepN as [s2 [m2 [Step Star]]].
+  unfold star. unfold corestep_star. eauto.
+Qed.
+
+(*
+Lemma invert_star00: forall ge s1 m1 s3 m3,
+  star ge s1 m1 s3 m3 ->
   s1 = s3 /\ m1 = m3 \/ exists s2 m2, cl_step ge s1 m1 s2 m2 /\ star ge s2 m2 s3 m3.
 Proof.
   introv Star. unfold star in Star. unfold corestep_star in Star. destruct Star as [n StepN].
@@ -239,8 +260,58 @@ Proof.
   - simpl in StepN. right. destruct StepN as [s2 [m2 [Step Star]]].
     unfold star. unfold corestep_star. eauto.
 Qed.
+*)
 
-Lemma invert_star_return: forall ge e1 te1 m1 e2 te2 m2 ek vl k retExpr,
+Lemma invert_plus_return: forall ge e1 te1 m1 e2 te2 m2 k k' retExpr,
+  plus ge (State e1 te1 (Kseq (Sreturn retExpr) :: k)) m1
+          (State e2 te2 k') m2 ->
+  exists k' te' ve' v' f optid te'' m11,
+    call_cont k = Kcall optid f ve' te' :: k' /\
+    Mem.free_list m1 (blocks_of_env ge e1) = Some m11 /\
+    match retExpr with
+     | Some a =>
+         exists v,
+         Clight.eval_expr ge e1 te1 m1 a v /\
+         Cop.sem_cast v (typeof a) (fn_return f) m1 = Some v'
+     | None => v' = Vundef
+     end /\
+    match optid with
+     | Some id => True /\ te'' = PTree.set id v' te'
+     | None => True /\ te'' = te'
+     end.
+Proof.
+  introv Plus. apply invert_plus in Plus. destruct Plus as [s11 [m11 [Step Star]]].
+  inversion Step; subst.
+  repeat eexists; try eassumption.
+Qed.
+
+(*
+Lemma invert_star_return: forall ge e1 te1 m1 e2 te2 m2 k k' retExpr,
+  star ge (State e1 te1 (Kseq (Sreturn retExpr) :: k)) m1
+          (State e2 te2 k') m2 ->
+  e1 = e2 /\ te1 = te2 /\ (Kseq (Sreturn retExpr) :: k) = k' /\ m1 = m2 \/
+  exists k' te' ve' v' f optid te'' m11,
+    call_cont k = Kcall optid f ve' te' :: k' /\
+    Mem.free_list m1 (blocks_of_env ge e1) = Some m11 /\
+    match retExpr with
+     | Some a =>
+         exists v,
+         Clight.eval_expr ge e1 te1 m1 a v /\
+         Cop.sem_cast v (typeof a) (fn_return f) m1 = Some v'
+     | None => v' = Vundef
+     end /\
+    match optid with
+     | Some id => True /\ te'' = PTree.set id v' te'
+     | None => True /\ te'' = te'
+     end.
+Proof.
+  introv Star. apply invert_star in Star. destruct Star as [[Eqs Eqm] | [s11 [m11 [Step Star]]]].
+  - left. inversion Eqs; subst. auto.
+  - right. inversion Step; subst.
+    repeat eexists; try eassumption.
+Qed.
+
+Lemma invert_star_return00: forall ge e1 te1 m1 e2 te2 m2 ek vl k retExpr,
   star ge (State e1 te1 (Kseq (Sreturn retExpr) :: k)) m1
           (State e2 te2 (exit_cont ek vl k)) m2 ->
   exists k' te' ve' v' f optid te'' m11,
@@ -267,6 +338,179 @@ Proof.
   - inversion Step; subst.
     repeat eexists; try eassumption.
 Qed.
+*)
+
+(*
+Lemma exit_cont_length: forall k ek vl,
+  length (exit_cont ek vl k) <= length k.
+Proof.
+  intro k. induction k; intros.
+  - destruct ek; simpl. omega.
+Qed.
+*)
+
+Definition fooooooooo := 1.
+
+Lemma continue_cont_length: forall k,
+  length (continue_cont k) <= S (length k).
+Proof.
+  intro k. induction k.
+  - simpl. omega.
+  - simpl. destruct a; simpl; omega.
+Qed.
+
+Lemma break_cont_length: forall k,
+  length (break_cont k) <= length k.
+Proof.
+  intro k. induction k; simpl.
+  - omega.
+  - destruct a; simpl; omega.
+Qed.
+
+Lemma call_cont_length: forall k,
+  length (call_cont k) <= length k.
+Proof.
+  intro k. induction k; simpl.
+  - omega.
+  - destruct a; simpl; omega.
+Qed.
+
+Lemma return_exit_cont_stronger: forall k r ek vl,
+  Kseq (Sreturn r) :: k = exit_cont ek vl k ->
+  ek = EK_return /\ (k = [] \/ exists i f e t k', k = Kcall i f e t :: k').
+Proof.
+  intros. destruct k as [|a k].
+  - destruct ek; simpl in H; try discriminate. auto.
+  - destruct ek; simpl in H.
+    + exfalso. eapply blah. eassumption.
+    + destruct a.
+      * apply (f_equal (@length cont')) in H. exfalso. pose proof (break_cont_length k).
+        simpl in H. omega.
+      * apply (f_equal (@length cont')) in H. exfalso. simpl in H. omega.
+      * discriminate.
+      * apply (f_equal (@length cont')) in H. exfalso. simpl in H. omega.
+      * discriminate.
+    + destruct a.
+      * apply (f_equal (@length cont')) in H. exfalso. pose proof (continue_cont_length k).
+        simpl in H. omega.
+      * discriminate.
+      * discriminate.
+      * apply (f_equal (@length cont')) in H. exfalso. pose proof (continue_cont_length k).
+        simpl in H. omega.
+      * discriminate.
+(*
+    + destruct vl.
+      * destruct a; destruct (call_cont k) eqn: E; try discriminate;
+        try destruct c;
+        try (rewrite <- E in H; inversion H;
+             apply (f_equal (@length cont')) in H2; exfalso; pose proof (call_cont_length k);
+             simpl in H2; omega); try (destruct l; discriminate).
+destruct l. discriminate. discriminate.
+destruct c; rewrite <- E in H; inversion H.
+*)
+    + apply (conj eq_refl). right. destruct vl.
+      * destruct a.
+        { destruct (call_cont k) eqn: E; try discriminate.
+          destruct c.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - discriminate.
+          - discriminate.
+          - discriminate.
+          - destruct l; discriminate. }
+        { destruct (call_cont k) eqn: E; try discriminate.
+          destruct c.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - discriminate.
+          - discriminate.
+          - destruct l; discriminate. }
+        { destruct (call_cont k) eqn: E; try discriminate.
+          destruct c.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - discriminate.
+          - destruct l; discriminate. }
+        { destruct (call_cont k) eqn: E; try discriminate.
+          destruct c.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - rewrite <- E in H. inversion H.
+            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+            simpl in H2. omega.
+          - destruct l; discriminate. }
+        { destruct l.
+          - discriminate.
+          - repeat eexists. (* not a contradiction *) }
+      * destruct a.
+        { inversion H.
+          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+          simpl in H2. omega. }
+        { inversion H.
+          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+          simpl in H2. omega. }
+        { inversion H.
+          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+          simpl in H2. omega. }
+        { inversion H.
+          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+          simpl in H2. omega. }
+        { inversion H. repeat eexists. (* not a contradiction *) }
+Qed.
+
+Lemma return_exit_cont: forall k r ek vl,
+  Kseq (Sreturn r) :: k = exit_cont ek vl k -> ek = EK_return.
+Proof.
+  intro k. induction k; intros.
+  - destruct ek; simpl in H; try discriminate. reflexivity.
+  - destruct ek; simpl in H.
+    + exfalso. eapply blah. eassumption.
+    + destruct a.
+      * apply (f_equal (@length cont')) in H. exfalso. pose proof (break_cont_length k).
+        simpl in H. omega.
+      * apply (f_equal (@length cont')) in H. exfalso. simpl in H. omega.
+      * discriminate.
+      * apply (f_equal (@length cont')) in H. exfalso. simpl in H. omega.
+      * discriminate.
+    + destruct a.
+      * apply (f_equal (@length cont')) in H. exfalso. pose proof (continue_cont_length k).
+        simpl in H. omega.
+      * discriminate.
+      * discriminate.
+      * apply (f_equal (@length cont')) in H. exfalso. pose proof (continue_cont_length k).
+        simpl in H. omega.
+      * discriminate.
+    + reflexivity.
+Qed.
+
+(*
+Lemma exit_cont_eq_false: forall k c ek vl,
+  c :: k = exit_cont ek vl k -> False.
+Proof.
+  intro k. induction k; intros.
+  - destruct ek; simpl in H; try discriminate. admit. (* false *)
+  - destruct ek; simpl in H. eapply blah. eassumption. admit.
+Qed.
+*)
 
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
@@ -298,13 +542,26 @@ Proof.
     }
     rewrite E in C. clear E. apply C.
   - introv Sat Sat' SE HE Star Star'.
+    apply invert_star in Star. destruct Star as [E | Plus].
+    + inversion E as [E2 E1]. inversion E2 as [[E3 E4 E5]].
+      pose proof (return_exit_cont _ _ _ _ E5). subst.
+      apply invert_star in Star'. destruct Star' as [E' | Plus'].
+      * inversion E' as [E2' E1']. inversion E2' as [[E3' E4' E5']].
+        pose proof (return_exit_cont _ _ _ _ E5'). subst.
+        refine (conj eq_refl (conj _ (conj _ _))).
+        { admit. } { Fail apply SE. (*
+
+
+      pose proof (return_exit_cont _ _ _ _ E5) as C.
+      destruct C as [E0 [Eq | [i [f [e [t [ k' Eq]]]]]]].
+      * subst. simpl in E5.
     apply invert_star_return in Star .
     destruct Star as [k' [te' [ve' [v' [f' [optid' [te'' [m11 [Eqk [Ekm [EqRe EqO]]]]]]]]]]].
     apply invert_star_return in Star'.
     destruct Star' as
       [k'0 [te'0 [ve'0 [v'0 [f'0 [optid'0 [te''0 [m110 [Eqk0 [Ekm0 [EqRe0 EqO0]]]]]]]]]]].
     rewrite Eqk in Eqk0. inversion Eqk0. subst optid'0 f'0 ve'0 te'0 k'0. clear Eqk0.
-    (* TODO... *)
+     TODO... *)
 Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
