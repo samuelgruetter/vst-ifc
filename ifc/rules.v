@@ -375,9 +375,16 @@ Proof.
   - destruct a; simpl; omega.
 Qed.
 
+(* add "(eval r) = vl" in conclusion? -> No, because this is for the 0-step case *)
 Lemma return_exit_cont_stronger: forall k r ek vl,
   Kseq (Sreturn r) :: k = exit_cont ek vl k ->
   ek = EK_return /\ (k = [] \/ exists i f e t k', k = Kcall i f e t :: k').
+(*
+  ek = EK_return /\ (
+    (k = []) \/
+    (vl = None) \/
+    (exists i f e t v k', k = Kcall None (zap_fn_return f) e (PTree.set i v t) :: k' /\ vl = Some v)).
+*)
 Proof.
   intros. destruct k as [|a k].
   - destruct ek; simpl in H; try discriminate. auto.
@@ -398,83 +405,46 @@ Proof.
       * apply (f_equal (@length cont')) in H. exfalso. pose proof (continue_cont_length k).
         simpl in H. omega.
       * discriminate.
-(*
-    + destruct vl.
-      * destruct a; destruct (call_cont k) eqn: E; try discriminate;
-        try destruct c;
-        try (rewrite <- E in H; inversion H;
-             apply (f_equal (@length cont')) in H2; exfalso; pose proof (call_cont_length k);
-             simpl in H2; omega); try (destruct l; discriminate).
-destruct l. discriminate. discriminate.
-destruct c; rewrite <- E in H; inversion H.
-*)
-    + apply (conj eq_refl). right. destruct vl.
+    + apply (conj eq_refl). right.
+      remember (match a with
+          | Kseq _ => call_cont k
+          | Kloop1 _ _ => call_cont k
+          | Kloop2 _ _ => call_cont k
+          | Kswitch => call_cont k
+          | Kcall _ _ _ _ => a :: k
+          end) as M.
+      destruct vl.
+      * destruct M; try discriminate.
+        destruct c.
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in HeqM. exfalso. pose proof (call_cont_length M).
+           simpl in HeqM. omega.
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in HeqM. exfalso. pose proof (call_cont_length M).
+           simpl in HeqM. omega.
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in HeqM. exfalso. pose proof (call_cont_length M).
+           simpl in HeqM. omega.
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in HeqM. exfalso. pose proof (call_cont_length M).
+           simpl in HeqM. omega.
+        ++ destruct l.
+           ** inversion H; subst. repeat eexists. (* not a contradiction *)
+           ** inversion H; subst. repeat eexists. (* not a contradiction *)
       * destruct a.
-        { destruct (call_cont k) eqn: E; try discriminate.
-          destruct c.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - discriminate.
-          - discriminate.
-          - discriminate.
-          - destruct l; discriminate. }
-        { destruct (call_cont k) eqn: E; try discriminate.
-          destruct c.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - discriminate.
-          - discriminate.
-          - destruct l; discriminate. }
-        { destruct (call_cont k) eqn: E; try discriminate.
-          destruct c.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - discriminate.
-          - destruct l; discriminate. }
-        { destruct (call_cont k) eqn: E; try discriminate.
-          destruct c.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - rewrite <- E in H. inversion H.
-            apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-            simpl in H2. omega.
-          - destruct l; discriminate. }
-        { destruct l.
-          - discriminate.
-          - repeat eexists. (* not a contradiction *) }
-      * destruct a.
-        { inversion H.
-          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-          simpl in H2. omega. }
-        { inversion H.
-          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-          simpl in H2. omega. }
-        { inversion H.
-          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-          simpl in H2. omega. }
-        { inversion H.
-          apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
-          simpl in H2. omega. }
-        { inversion H. repeat eexists. (* not a contradiction *) }
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+           simpl in H2. omega.
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+           simpl in H2. omega.
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+           simpl in H2. omega.
+        ++ inversion H; subst.
+           apply (f_equal (@length cont')) in H2. exfalso. pose proof (call_cont_length k).
+           simpl in H2. omega.
+        ++ repeat eexists. (* not a contradiction *)
 Qed.
 
 Lemma return_exit_cont: forall k r ek vl,
@@ -544,9 +514,11 @@ Proof.
   - introv Sat Sat' SE HE Star Star'.
     apply invert_star in Star. destruct Star as [E | Plus].
     + inversion E as [E2 E1]. inversion E2 as [[E3 E4 E5]].
+      (* note: inversion also rewrote "exit_cont ..." to "Kseq ... :: k" below the line *)
       pose proof (return_exit_cont _ _ _ _ E5). subst.
       apply invert_star in Star'. destruct Star' as [E' | Plus'].
       * inversion E' as [E2' E1']. inversion E2' as [[E3' E4' E5']].
+        (* note: inversion also rewrote "exit_cont ..." to "Kseq ... :: k" below the line *)
         pose proof (return_exit_cont _ _ _ _ E5'). subst.
         refine (conj eq_refl (conj _ (conj _ _))).
         { admit. } { Fail apply SE. (*
