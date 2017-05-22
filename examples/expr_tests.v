@@ -73,7 +73,7 @@ Goal no_loads_expr test2 false = false. reflexivity. Qed.
 Goal no_loads_expr test2 true = true. reflexivity. Qed.
 
 Lemma sanity_test: forall N e as_lvalue,
-  clsf_expr N as_lvalue e = None <-> no_loads_expr e as_lvalue = false.
+  clsf_expr_lr as_lvalue N e = None <-> no_loads_expr e as_lvalue = false.
 Proof.
   intros N e. induction e; intro; split; intro; simpl in *; 
   [ discriminate | discriminate | discriminate | discriminate |
@@ -109,15 +109,15 @@ Proof.
   - edestruct IHe; auto.
   (* Ebinop *)
   - apply andb_false_iff.
-    destruct (clsf_expr N as_lvalue e1) eqn: E1;
-    destruct (clsf_expr N as_lvalue e2) eqn: E2.
+    destruct (clsf_expr_lr as_lvalue N e1) eqn: E1;
+    destruct (clsf_expr_lr as_lvalue N e2) eqn: E2.
     + discriminate.
     + right. edestruct IHe2. eauto.
     + left. edestruct IHe1. eauto.
     + left. edestruct IHe1. eauto.
   - destr1.
-    destruct (clsf_expr N as_lvalue e1) eqn: E1;
-    destruct (clsf_expr N as_lvalue e2) eqn: E2;
+    destruct (clsf_expr_lr as_lvalue N e1) eqn: E1;
+    destruct (clsf_expr_lr as_lvalue N e2) eqn: E2;
     try reflexivity.
     destruct H.
     + destruct (IHe1 as_lvalue). specialize (H1 H). congruence.

@@ -159,6 +159,7 @@ Axiom ifc_ifthenelse: forall (Delta: tycontext)
   (b: expr) (c1 c2: statement)
   (P': T -> ret_assert) (N': T -> ret_stack_clsf) (A': T -> ret_heap_clsf),
   bool_type (typeof b) = true ->
+  (forall x, ENTAIL Delta, P x |-- !! (clsf_expr (N x) b = Some Lo)) ->
   ifc_def T Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
   ifc_def T Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
   ifc_def T Delta P N A (Sifthenelse b c1 c2) P' N' A'.
@@ -202,8 +203,8 @@ Axiom ifc_store:
          (tc_expr Delta (Ecast e2 t))) ->
       (* IFC preconditions: *)
       (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
-                 !! (clsf_expr (N x) true e1 = Some (l1 x) /\
-                     clsf_expr (N x) false e2 = Some (l2 x))) ->
+                 !! (clsf_lvalue (N x) e1 = Some (l1 x) /\
+                     clsf_expr   (N x) e2 = Some (l2 x))) ->
       ifc_def T Delta
         (fun x => (|>PROPx (P x) (LOCALx (Q x) (SEPx (R x)))))
         N
