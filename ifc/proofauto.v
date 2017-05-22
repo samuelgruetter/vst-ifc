@@ -1,6 +1,6 @@
-Require Export ifc.rules.
 Require Export ifc.proofauto_lemmas.
-Require Export ifc.ifc.
+Require Export ifc.ifc_body.
+
 Require Export floyd.proofauto.
 
 (* not used (yet?) *)

@@ -1,8 +1,7 @@
 Require Import floyd.base.
 Require Import floyd.canon.
 Require Import floyd.client_lemmas.
-Require Import ifc.rules.
-Require Import ifc.ifc.
+Require Import ifc.ifc_def.
 Require Import lib.LibTactics.
 
 Local Open Scope logic.
@@ -16,11 +15,13 @@ Lemma isequential'{T: Type}:
     ifc_def T Delta P N A c (inormal_ret_assert P') (normalPostClsf N') (normalPostClsf A') ->
     ifc_def T Delta P N A c (ioverridePost P' R) (overridePostClsf N' RN) (overridePostClsf A' RA).
 Proof.
+(*
   intros. unfold ifc_def. unfold ioverridePost. unfold inormal_ret_assert in *.
   split_ifc_hyps. split.
   - intro. apply canon.sequential'. apply Hs.
   - unfold ifc_core, simple_ifc in *. unfold overridePostClsf in *.
     (* TODO use VST to conclude that it's EK_normal and use this to simplify the goal *)
+*)
 Admitted.
 
 Lemma ifc_seq'{T: Type}:
@@ -38,10 +39,8 @@ Lemma ifc_pre0{T: Type}: forall Delta P1 P1' N1 A1 c P2 N2 A2,
   ifc_def T Delta P1' N1 A1 c P2 N2 A2 ->
   ifc_def T Delta P1  N1 A1 c P2 N2 A2.
 Proof.
-  introv Imp H. split_ifc_hyps. split.
-  - intro. apply* semax_pre.
-  - unfold ifc_core, simple_ifc in *. intros.
-    apply* Hi; apply* VST_to_state_pred_commutes_imp'.
+  introv Imp H. eapply ifc_pre; try eassumption.
+  intro. apply prop_right. split; apply lle_refl.
 Qed.
 
 Lemma ifc_ifthenelse_PQR{T: Type}:
@@ -83,12 +82,8 @@ Lemma ifc_later_trivial{T: Type}:
   ifc_def T Delta (fun x => (|> (P x))) N A c P' N' A' ->
   ifc_def T Delta                P      N A c P' N' A'.
 Proof.
-  intros. split_ifc_hyps. unfold ifc_def, ifc_core, simple_ifc in *. split.
-  - intro. apply* semax_later_trivial.
-  - introv Sat Sat'.
-    apply VST_to_state_pred_commutes_imp with (P' := (|> P x )) in Sat ; [ | apply now_later ].
-    apply VST_to_state_pred_commutes_imp with (P' := (|> P x')) in Sat'; [ | apply now_later ].
-    apply* Hi.
+  intros. apply ifc_pre0 with (P1' := (fun x => (|> (P x)))); [ | assumption ].
+  intro. apply andp_left2. apply now_later.
 Qed.
 
 End fwd_lemmas.

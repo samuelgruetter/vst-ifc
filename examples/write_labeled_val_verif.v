@@ -129,15 +129,37 @@ Proof.
   - (* evaluating the condition *)
     intro. entailer. (* NOTE floyd: entailer! produces a false goal here, so we have to use entailer *)
   - (* then-branch *)
-    unfold ifc_def. split.
-    + (* VST part *)
-      start_VST.
-      Intros. destruct H0; try contradiction. subst b0.
-      (* NOTE: this is the unmodified "forward" of VST! *)
-      forward.
-      entailer!.
-    + (* IFC part *)
-      apply ifc_core0_always_holds.
+    apply ifc_later_trivial.
+    rewrite -> ifc_seq_skip. eapply ifc_seq'. {
+        eapply ifc_store with (n := 0%nat); try reflexivity; try intro x.
+      + entailer!.
+      + entailer.
+      + apply JMeq_refl.
+      + auto.
+      + entailer!.
+      + assert_PROP (isptr x.(highptr)) as IP. { entailer!. }
+        destruct x.(highptr); try contradiction. clear IP.
+        (* TODO floyd: the two lines above would not be necessary if entailer! gave me
+           isptr instead of only is_pointer_or_null. *)
+        entailer!.
+    } {
+      simpl update_tycon. simpl. unfold inormal_ret_assert.
+      eapply ifc_pre; [ | | eapply ifc_skip ].
+      - intro. entailer!.
+        destruct H0.
+        + exfalso. apply H. apply H0.
+        + rewrite H0. simpl. cancel.
+      - intro. assert_PROP (x.(highptr) <> x.(lowptr)) as NA by entailer!.
+        entailer!.
+        split.
+        + apply lle_refl.
+        + apply lle_pointwise. intro loc. clear H H0.
+          destruct (heap_loc_eq_val loc x.(highptr)) eqn: E.
+          * destruct (heap_loc_eq_val loc x.(lowptr)) eqn: E2.
+            { exfalso. apply NA. apply* heap_loc_eq_val_trans. }
+            { apply lle_refl. }
+          * apply lle_refl.
+  }
   - (* else-branch *)
     apply ifc_later_trivial.
     rewrite -> ifc_seq_skip. eapply ifc_seq'. {
@@ -158,17 +180,10 @@ Proof.
       - intro. destruct (Int.eq x.(b) Int.zero) eqn: E.
         + rewrite E. entailer!.
         + Intros. rewrite H in E. rewrite Int.eq_true in E. discriminate.
-      - intro. (* TODO floyd make "Intros." work here. *)
-        rewrite <- TT_andp at 1. repeat (simple apply derives_extract_PROP; intro).
-        apply prop_right. split.
+      - intro. Intros. clear H0. entailer!. split.
         + apply lle_refl.
-        + apply lle_pointwise. intro loc.
-          destruct (heap_loc_eq_val loc x.(lowptr)) eqn: E.
-          * unfold typed_false in H. simpl in H. inversion H. unfold negb in H2.
-            destruct (Int.eq x.(b) Int.zero) eqn: E2.
-            { apply lle_refl. }
-            { discriminate. }
-          * apply lle_refl.
+        + apply lle_pointwise. intro loc. rewrite H. simpl.
+          destruct (heap_loc_eq_val loc x.(lowptr)) eqn: E; apply lle_refl.
   } } {
   eapply ifc_pre; [ | | eapply ifc_return with (retVal := None) ].
   - intro. entailer!.
