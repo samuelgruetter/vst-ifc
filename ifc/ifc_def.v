@@ -4,6 +4,7 @@ Require Import ifc.simple_vst_store_lemmas.
 Require Import veric.Clight_new.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
+Require Import ifc.vst_ifthenelse.
 Require Import List. Import ListNotations.
 
 Local Open Scope logic.
@@ -278,9 +279,11 @@ Proof.
           - do 2 apply andp_left2. apply derives_refl.
           - rewrite <- andp_assoc. apply andp_left1.
 unfold local, liftx, lift1, lift. simpl.
-unfold typed_true. unfold strict_bool_val.
-intro rho. destruct (eval_expr b rho) eqn: E.
+unfold typed_true.
+intro rho. apply andp_left2. 
 
+(* here, we have "tc_expr ... |-- ", but in strict_bool_val_eval_expr int vst_ifthenelse.v, we
+   need "(tc_expr ...) phi" where phi is an rmap *)
 Admitted.
 
 
