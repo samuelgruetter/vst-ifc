@@ -232,6 +232,16 @@ Lemma ifc_seq_skip{T: Type}:
 Proof.
 Admitted.
 
+Lemma invert_ifthenelse: forall ge e1 te1 m1 cond c1 c2 k s2 m2,
+  plus ge (State e1 te1 (Kseq (Sifthenelse cond c1 c2) :: k)) m1 s2 m2 ->
+  exists v b, Clight.eval_expr ge e1 te1 m1 cond v /\
+              Cop.bool_val v (typeof cond) m1 = Some b /\
+              star ge (State e1 te1 (Kseq (if b then c1 else c2) :: k)) m1 s2 m2.
+Proof.
+  introv Pl. apply invert_plus in Pl. destruct Pl as [s1' [m1' [Step Star]]].
+  inversion Step. subst. rename m1' into m1. eauto.
+Qed.
+
 Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext) 
   (P: T -> pre_assert) (N: T -> stack_clsf) (A: T -> heap_clsf)
   (b: expr) (c1 c2: statement)
@@ -240,14 +250,37 @@ Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext)
   (forall x, ENTAIL Delta, P x |-- !! (clsf_expr (N x) b = Some Lo)) ->
   ifc_def T Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
   ifc_def T Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
-  ifc_def T Delta P N A (Sifthenelse b c1 c2) P' N' A'.
+  ifc_def T Delta (iand (iprop (tc_expr Delta (Eunop Onotbool b tint))) P) N A
+         (Sifthenelse b c1 c2) P' N' A'.
 Proof.
   introv Eq Cl B1 B2.
   split_ifc_hyps. split.
   - (* VST part *)
-    intro x. admit.
+    intro x. unfold iand, iprop in *. apply* semax_ifthenelse.
   - unfold ifc_core in *. unfold simple_ifc in *.
     introv Sat Sat' SE1 HE1 Star Star'.
+    apply invert_star in Star. apply invert_star in Star'.
+    destruct Star as [E | Plus]; destruct Star' as [E' | Plus'].
+    (* cases where at least one doesn't step, annoying *)
+    + admit.
+    + admit.
+    + admit.
+    (* case where both do at least one step: *)
+    + apply invert_ifthenelse in Plus . destruct Plus  as [b0  [b00  [Ev  [Bv  Star ]]]].
+      apply invert_ifthenelse in Plus'. destruct Plus' as [b0' [b00' [Ev' [Bv' Star']]]].
+      assert (b00 = b00') as EqCond by admit. (* TODO obtain this from Cl *)
+      subst b00'.
+      destruct b00.
+      * apply* B1i.
+        { eapply VST_to_state_pred_commutes_imp'; [ | eapply Sat ]. instantiate (1 := Delta).
+          unfold iand, iprop in *.
+          apply andp_right.
+          - do 2 apply andp_left2. apply derives_refl.
+          - rewrite <- andp_assoc. apply andp_left1.
+unfold local, liftx, lift1, lift. simpl.
+unfold typed_true. unfold strict_bool_val.
+intro rho. destruct (eval_expr b rho) eqn: E.
+
 Admitted.
 
 

@@ -61,7 +61,9 @@ Proof.
   eapply ifc_pre0; [ | apply ifc_ifthenelse ]; unfold iand, iprop; try assumption.
   - instantiate (1:=
       (fun x => (local (`(eq (v x)) (eval_expr b))) && PROPx (P x) (LOCALx (Q x) (SEPx (R x))))).
-    intro. apply andp_right; [ apply (Ev x) | ]. apply andp_left2. apply derives_refl.
+    intro. apply andp_right.
+    + admit. 
+    + apply andp_right; [ apply (Ev x) | ]. apply andp_left2. apply derives_refl.
   - admit.
   - unfold pre_assert in *. remember (fun x : T =>
      andp

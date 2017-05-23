@@ -162,7 +162,8 @@ Axiom ifc_ifthenelse: forall (Delta: tycontext)
   (forall x, ENTAIL Delta, P x |-- !! (clsf_expr (N x) b = Some Lo)) ->
   ifc_def T Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
   ifc_def T Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
-  ifc_def T Delta P N A (Sifthenelse b c1 c2) P' N' A'.
+  ifc_def T Delta (iand (iprop (tc_expr Delta (Eunop Onotbool b tint))) P) N A
+         (Sifthenelse b c1 c2) P' N' A'.
 
 Axiom ifc_return:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
