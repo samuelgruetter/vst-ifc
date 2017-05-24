@@ -46,6 +46,8 @@ Qed.
 Lemma ifc_ifthenelse_PQR{T: Type}:
   forall (v: T -> val) Delta P Q R (b: expr) c d Post N A N' A',
     bool_type (typeof b) = true ->
+    (forall x: T, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+                     !! (clsf_expr (N x) b = Some Lo)) ->
     (forall x: T, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |-- 
                     (tc_expr Delta (Eunop Cop.Onotbool b tint)))  ->
     (forall x: T, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
@@ -57,28 +59,29 @@ Lemma ifc_ifthenelse_PQR{T: Type}:
     ifc [x: T] Delta |-- (PROPx (P x) (LOCALx (Q x) (SEPx (R x)))) (N x) (A x)
                          (Sifthenelse b c d) (Post x) (N' x) (A' x).
 Proof.
-  introv Eq Tc Ev B1 B2.
+  introv Eq Cl Tc Ev B1 B2.
   eapply ifc_pre0; [ | apply ifc_ifthenelse ]; unfold iand, iprop; try assumption.
-  - instantiate (1:=
-      (fun x => (local (`(eq (v x)) (eval_expr b))) && PROPx (P x) (LOCALx (Q x) (SEPx (R x))))).
-    intro. apply andp_right.
-    + admit. 
-    + apply andp_right; [ apply (Ev x) | ]. apply andp_left2. apply derives_refl.
-  - admit.
-  - unfold pre_assert in *. remember (fun x : T =>
-     andp
-     ((fun x0 : T =>
-       andp (local (liftx (eq (v x0) : forall _ : val, Prop) (eval_expr b)))
-         (PROPx (P x0) (LOCALx (Q x0) (SEPx (R x0))))) x)
-     (local (liftx (typed_true (typeof b)) (eval_expr b)))) as f.
-    rewrite <- Heqf.
+  - intro. apply andp_right.
+    + apply Tc.
+    + apply andp_left2. apply derives_refl.
+  - apply Cl.
+  - unfold pre_assert in *. (* <- in implicit arguments *) remember (fun x : T =>
+      andp ((fun x0 : T => PROPx (P x0) (LOCALx (Q x0) (SEPx (R x0)))) x)
+       (local (liftx (typed_true (typeof b)) (eval_expr b)))) as f.
     replace f
     with (fun x : T =>
       PROPx (typed_true (typeof b) (v x) :: P x) (LOCALx (Q x) (SEPx (R x)))).
     + exact B1.
-    + subst f. extensionality. admit.
-  - admit.
-Admitted.
+    + subst f. extensionality. admit. (* from Ev and rewriting *)
+  - unfold pre_assert in *. (* <- in implicit arguments *) remember (fun x : T =>
+      andp ((fun x0 : T => PROPx (P x0) (LOCALx (Q x0) (SEPx (R x0)))) x)
+       (local (liftx (typed_false (typeof b)) (eval_expr b)))) as f.
+    replace f
+    with (fun x : T =>
+      PROPx (typed_false (typeof b) (v x) :: P x) (LOCALx (Q x) (SEPx (R x)))).
+    + exact B2.
+    + subst f. extensionality. admit. (* from Ev and rewriting *)
+Qed.
 
 Lemma ifc_later_trivial{T: Type}:
   forall Delta P N A c P' N' A',

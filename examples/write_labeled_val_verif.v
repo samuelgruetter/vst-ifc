@@ -124,6 +124,9 @@ Proof.
      x is a free variable, we still can apply ifc_ifthenelse_PQR, which expects a goal in the first
      form, because Coq's unification algorithm is strong enough to match this. *)
   eapply ifc_ifthenelse_PQR; try reflexivity; unfold iand, iprop.
+  - (* prove we're not branching on high data *)
+    intro. entailer!.
+    (* Note: entailer! simplified clsf_expr and the classification function automatically *)
   - (* typechecking the condition *)
     intro. entailer!.
   - (* evaluating the condition *)
