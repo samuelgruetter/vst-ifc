@@ -86,21 +86,20 @@ Proof.
   rewrite VST_indep_state_pred. reflexivity.
 Qed.
 
-Definition ioverridePost{A: Type}(Q: A -> environ -> mpred)(R : A -> ret_assert): A -> ret_assert :=
-  fun (x: A) => (overridePost (Q x) (R x)).
+Definition lft0 {T} {B} (r: B) : T -> B := fun _ => r.
+Definition lft1 {T} {A1 B} (f: A1 -> B) (a1: T -> A1) : T -> B := fun x => f (a1 x).
+Definition lft2 {T} {A1 A2 B} (f: A1 -> A2 -> B) (a1: T -> A1) (a2: T -> A2):
+   T -> B := fun x => f (a1 x) (a2 x).
+Definition lft3 {T} {A1 A2 A3 B} (f: A1 -> A2 -> A3 -> B)
+     (a1: T -> A1) (a2: T -> A2) (a3: T -> A3) :  T -> B :=
+     fun x => f (a1 x) (a2 x) (a3 x).
+Definition lft4 {T} {A1 A2 A3 A4 B} (f: A1 -> A2 -> A3 -> A4 -> B)
+     (a1: T -> A1) (a2: T -> A2) (a3: T -> A3)(a4: T -> A4):  T -> B :=
+     fun x => f (a1 x) (a2 x) (a3 x) (a4 x).
 
 Definition overridePostClsf{A C: Type}(Q: A -> C)(R: A -> exitkind -> option val -> C)
 : A -> exitkind -> option val -> C
 := fun (x: A) (ek: exitkind) (vl: option val) => if eq_dec ek EK_normal then Q x else R x ek vl.
-(* We need lifting on top of VST's lifting... *)
-
-Definition iand{A: Type}(P1: A -> pre_assert)(P2: A -> pre_assert): A -> pre_assert :=
-  fun (x: A) => (P1 x) && (P2 x).
-
-Definition iprop{A: Type}(P: pre_assert): A -> pre_assert := fun (_: A) => P.
-
-Definition inormal_ret_assert{A: Type}(P: A -> environ -> mpred): A -> ret_assert :=
-  fun (x: A) => normal_ret_assert (P x).
 
 Definition normalPostClsf{A Loc: Type}(Q: A -> Loc -> label)
 : A -> exitkind -> option val -> Loc -> label
@@ -142,13 +141,14 @@ Axiom ifc_seq:
     (P1 P2: T -> environ -> mpred) (P3: T -> ret_assert)
     (N1 N2: T -> stack_clsf) (N3: T -> ret_stack_clsf)
     (A1 A2: T -> heap_clsf) (A3: T -> ret_heap_clsf),
-  ifc_def T Delta P1 N1 A1 h (ioverridePost P2 P3) (overridePostClsf N2 N3) (overridePostClsf A2 A3) ->
+  ifc_def T Delta P1 N1 A1 h 
+          (lft2 overridePost P2 P3) (overridePostClsf N2 N3) (overridePostClsf A2 A3) ->
   ifc_def T (update_tycon Delta h) P2 N2 A2 t P3 N3 A3 ->
   ifc_def T Delta P1 N1 A1 (Ssequence h t) P3 N3 A3.
 
 Axiom ifc_skip:
   forall Delta P N A,
-  ifc_def T Delta P N A Sskip (inormal_ret_assert P) (normalPostClsf N) (normalPostClsf A).
+  ifc_def T Delta P N A Sskip (lft1 normal_ret_assert P) (normalPostClsf N) (normalPostClsf A).
 
 Axiom ifc_seq_skip:
   forall Delta P N A c P' N' A',
@@ -160,9 +160,9 @@ Axiom ifc_ifthenelse: forall (Delta: tycontext)
   (P': T -> ret_assert) (N': T -> ret_stack_clsf) (A': T -> ret_heap_clsf),
   bool_type (typeof b) = true ->
   (forall x, ENTAIL Delta, P x |-- !! (clsf_expr (N x) b = Some Lo)) ->
-  ifc_def T Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
-  ifc_def T Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
-  ifc_def T Delta (iand (iprop (tc_expr Delta (Eunop Onotbool b tint))) P) N A
+  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
+  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
+  ifc_def T Delta (lft2 andp (lft0 (tc_expr Delta (Eunop Onotbool b tint))) P) N A
          (Sifthenelse b c1 c2) P' N' A'.
 
 Axiom ifc_return:

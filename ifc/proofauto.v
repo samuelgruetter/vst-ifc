@@ -16,7 +16,7 @@ Qed.
 Ltac start_VST :=
   lazymatch goal with
   | |- forall y, semax _ _ _ _ =>
-         unfold inormal_ret_assert;
+         unfold lft0, lft1, lft2, lft3, lft4;
          let x := fresh "x00" in let E := fresh "E00" in 
          intro x; destruct x eqn: E;
          match type of E with

@@ -123,7 +123,7 @@ Proof.
      rather in the form "fun x: MyMetaVars => PROP P LOCAL Q SEP R", where P, Q, R are terms in which
      x is a free variable, we still can apply ifc_ifthenelse_PQR, which expects a goal in the first
      form, because Coq's unification algorithm is strong enough to match this. *)
-  eapply ifc_ifthenelse_PQR; try reflexivity; unfold iand, iprop.
+  eapply ifc_ifthenelse_PQR; try reflexivity; unfold lft0, lft2.
   - (* prove we're not branching on high data *)
     intro. entailer!.
     (* Note: entailer! simplified clsf_expr and the classification function automatically *)
@@ -146,7 +146,7 @@ Proof.
            isptr instead of only is_pointer_or_null. *)
         entailer!.
     } {
-      simpl update_tycon. simpl. unfold inormal_ret_assert.
+      simpl update_tycon. simpl. unfold lft1.
       eapply ifc_pre; [ | | eapply ifc_skip ].
       - intro. entailer!.
         destruct H0.
@@ -178,7 +178,7 @@ Proof.
            isptr instead of only is_pointer_or_null. *)
         entailer!.
     } {
-      simpl update_tycon. simpl. unfold inormal_ret_assert.
+      simpl update_tycon. simpl. unfold lft1.
       eapply ifc_pre; [ | | eapply ifc_skip ].
       - intro. destruct (Int.eq x.(b) Int.zero) eqn: E.
         + rewrite E. entailer!.

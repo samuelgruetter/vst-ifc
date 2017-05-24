@@ -144,7 +144,8 @@ Lemma ifc_seq{T: Type}:
     (P1 P2: T -> environ -> mpred) (P3: T -> ret_assert)
     (N1 N2: T -> stack_clsf) (N3: T -> ret_stack_clsf)
     (A1 A2: T -> heap_clsf) (A3: T -> ret_heap_clsf),
-  ifc_def T Delta P1 N1 A1 h (ioverridePost P2 P3) (overridePostClsf N2 N3) (overridePostClsf A2 A3) ->
+  ifc_def T Delta P1 N1 A1 h 
+          (lft2 overridePost P2 P3) (overridePostClsf N2 N3) (overridePostClsf A2 A3) ->
   ifc_def T (update_tycon Delta h) P2 N2 A2 t P3 N3 A3 ->
   ifc_def T Delta P1 N1 A1 (Ssequence h t) P3 N3 A3.
 Proof.
@@ -168,7 +169,7 @@ Proof.
       destruct ek2.
       { pose proof (VST_sound _ _ _ _ EK_normal vl2 (Kseq t :: c') (H1s x)) as C.
         pose proof (VST_sound _ _ _ _ EK_normal vl2' (Kseq t :: c') (H1s x')) as C'.
-        unfold ioverridePost in C, C'.
+        unfold lft2 in C, C'.
         erewrite VST_overridePost_to_state_pred in C, C'.
         eapply H2i.
         * edestruct C as [? ?]; eassumption.
@@ -212,7 +213,7 @@ Qed.
 
 Lemma ifc_skip{T: Type}:
   forall Delta P N A,
-  ifc_def T Delta P N A Sskip (inormal_ret_assert P) (normalPostClsf N) (normalPostClsf A).
+  ifc_def T Delta P N A Sskip (lft1 normal_ret_assert P) (normalPostClsf N) (normalPostClsf A).
 Proof.
   intros. unfold ifc_def, ifc_core, simple_ifc. split.
   - intro x. apply semax_skip.
@@ -249,15 +250,17 @@ Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext)
   (P': T -> ret_assert) (N': T -> ret_stack_clsf) (A': T -> ret_heap_clsf),
   bool_type (typeof b) = true ->
   (forall x, ENTAIL Delta, P x |-- !! (clsf_expr (N x) b = Some Lo)) ->
-  ifc_def T Delta (iand P (iprop (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
-  ifc_def T Delta (iand P (iprop (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
-  ifc_def T Delta (iand (iprop (tc_expr Delta (Eunop Onotbool b tint))) P) N A
+  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_true  (typeof b)) (eval_expr b)))))
+          N A c1 P' N' A' ->
+  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_false (typeof b)) (eval_expr b)))))
+          N A c2 P' N' A' ->
+  ifc_def T Delta (lft2 andp (lft0 (tc_expr Delta (Eunop Onotbool b tint))) P) N A
          (Sifthenelse b c1 c2) P' N' A'.
 Proof.
   introv Eq Cl B1 B2.
   split_ifc_hyps. split.
   - (* VST part *)
-    intro x. unfold iand, iprop in *. apply* semax_ifthenelse.
+    intro x. unfold lft0, lft2 in *. apply* semax_ifthenelse.
   - unfold ifc_core in *. unfold simple_ifc in *.
     introv Sat Sat' SE1 HE1 Star Star'.
     apply invert_star in Star. apply invert_star in Star'.
@@ -274,7 +277,7 @@ Proof.
       destruct b00.
       * apply* B1i.
         { eapply VST_to_state_pred_commutes_imp'; [ | eapply Sat ]. instantiate (1 := Delta).
-          unfold iand, iprop in *.
+          unfold lft0, lft2 in *.
           apply andp_right.
           - do 2 apply andp_left2. apply derives_refl.
           - rewrite <- andp_assoc. apply andp_left1.

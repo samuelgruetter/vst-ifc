@@ -12,8 +12,8 @@ Context {CS: compspecs}.
 
 Lemma isequential'{T: Type}:
   forall R RN RA Delta P N A c P' N' A',
-    ifc_def T Delta P N A c (inormal_ret_assert P') (normalPostClsf N') (normalPostClsf A') ->
-    ifc_def T Delta P N A c (ioverridePost P' R) (overridePostClsf N' RN) (overridePostClsf A' RA).
+    ifc_def T Delta P N A c (lft1 normal_ret_assert P') (normalPostClsf N') (normalPostClsf A') ->
+    ifc_def T Delta P N A c (lft2 overridePost P' R) (overridePostClsf N' RN) (overridePostClsf A' RA).
 Proof.
 (*
   intros. unfold ifc_def. unfold ioverridePost. unfold inormal_ret_assert in *.
@@ -26,7 +26,7 @@ Admitted.
 
 Lemma ifc_seq'{T: Type}:
  forall Delta P1 N1 A1 c1 P2 N2 A2 c2 P3 N3 A3,
-   ifc_def T Delta P1 N1 A1 c1 (inormal_ret_assert P2) (normalPostClsf N2) (normalPostClsf A2) ->
+   ifc_def T Delta P1 N1 A1 c1 (lft1 normal_ret_assert P2) (normalPostClsf N2) (normalPostClsf A2) ->
    ifc_def T (update_tycon Delta c1) P2 N2 A2 c2 P3 N3 A3 ->
    ifc_def T Delta P1 N1 A1 (Ssequence c1 c2) P3 N3 A3.
 Proof.
@@ -60,7 +60,7 @@ Lemma ifc_ifthenelse_PQR{T: Type}:
                          (Sifthenelse b c d) (Post x) (N' x) (A' x).
 Proof.
   introv Eq Cl Tc Ev B1 B2.
-  eapply ifc_pre0; [ | apply ifc_ifthenelse ]; unfold iand, iprop; try assumption.
+  eapply ifc_pre0; [ | apply ifc_ifthenelse ]; unfold lft0, lft2; try assumption.
   - intro. apply andp_right.
     + apply Tc.
     + apply andp_left2. apply derives_refl.
