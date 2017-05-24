@@ -50,6 +50,23 @@ Proof.
 Admitted. (* TODO: Not sure that this is true: if I have a while loop for instance,
 what does the semantics do? *)
 
+Lemma star_nochange: forall ge e1 te1 e2 te2 k m1 m2,
+  star ge (State e1 te1 (Kseq (Sloop Sskip Sskip) :: k)) m1
+          (State e2 te2 (Kseq (Sloop Sskip Sskip) :: k)) m2 ->
+  e2 = e1 /\ te2 = te1 /\ m2 = m1.
+Proof.
+  intros.
+  remember (State e1 te1 (Kseq (Sloop Sskip Sskip) :: k)) as s1.
+  remember (State e2 te2 (Kseq (Sloop Sskip Sskip) :: k)) as s2.
+  gen e1 te1 e2 te2 k Heqs1 Heqs2.
+  unfold star, corestep_star in H. destruct H as [n H].
+  induction n; intros; subst.
+  - simpl in H. inversion H. auto.
+  - simpl in H. destruct H as [s11 [m11 [Step Star]]].
+    inversion Step. subst m11 s11. subst.
+    (* continue inversion on Star, will need IH on (n-2) *)
+Abort. (* should work *)
+
 (* What's the inbuilt lemma? *)
 Lemma blah{A : Type}:
   forall (a : A) b,
