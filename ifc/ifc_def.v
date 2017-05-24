@@ -5,6 +5,8 @@ Require Import veric.Clight_new.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
 Require Import ifc.vst_ifthenelse.
+Require Import floyd.client_lemmas.
+Require Import floyd.sc_set_load_store.
 Require Import List. Import ListNotations.
 
 Local Open Scope logic.
@@ -16,6 +18,8 @@ Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 ek vl 
   VST_to_state_pred P1 e1 te1 m1 ->
   star ge (State e1 te1 (cons (Kseq c) k)) m1 (State e2 te2 (exit_cont ek vl k)) m2 ->
   VST_to_state_pred (P2 ek vl) e2 te2 m2.
+
+Module IFC : IFC_SIG.
 
 (* general low-equivalence *)
 Definition gen_lo_equiv{Loc V: Type}(f1 f2: Loc -> label)(s1 s2: Loc -> V) :=
@@ -117,8 +121,6 @@ Definition ifc_core {A: Type} (Delta: tycontext)
 := let preP'  := fun (x: A) => VST_to_state_pred (preP x) in
    let postP' := fun (x: A) => VST_post_to_state_pred (postP x) in
    simple_ifc Delta preP' preN preA c postN postA.
-
-Module IFC : IFC_SIG.
 
 Definition ifc_def (A: Type) {cs: compspecs} {Espec: OracleKind} (Delta: tycontext)
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -233,16 +235,6 @@ Lemma ifc_seq_skip{T: Type}:
   ifc_def T Delta P N A c P' N' A' <-> ifc_def T Delta P N A (Ssequence c Sskip) P' N' A'.
 Proof.
 Admitted.
-
-Lemma invert_ifthenelse: forall ge e1 te1 m1 cond c1 c2 k s2 m2,
-  plus ge (State e1 te1 (Kseq (Sifthenelse cond c1 c2) :: k)) m1 s2 m2 ->
-  exists v b, Clight.eval_expr ge e1 te1 m1 cond v /\
-              Cop.bool_val v (typeof cond) m1 = Some b /\
-              star ge (State e1 te1 (Kseq (if b then c1 else c2) :: k)) m1 s2 m2.
-Proof.
-  introv Pl. apply invert_plus in Pl. destruct Pl as [s1' [m1' [Step Star]]].
-  inversion Step. subst. rename m1' into m1. eauto.
-Qed.
 
 Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext) 
   (P: T -> pre_assert) (N: T -> stack_clsf) (A: T -> heap_clsf)
@@ -384,6 +376,61 @@ Proof.
     apply* Hi.
     + apply* weaken_stack_lo_equiv.
     + apply* weaken_heap_lo_equiv.
+Qed.
+
+Lemma clsf_expr_sound{T: Type}: 
+forall Delta ge P Q R N e l A e1 te1 m1 e1' te1' m1' v v' x x' k1 k1',
+  (forall x : T,
+     ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x)))
+     |-- !! (clsf_expr (N x) e = Some (l x))) ->
+  VST_to_state_pred (|> PROPx (P x) (LOCALx (Q x) (SEPx (R x)))) e1 te1 m1 ->
+  VST_to_state_pred (|> PROPx (P x') (LOCALx (Q x') (SEPx (R x')))) e1' te1' m1' ->
+  stack_lo_equiv (State e1 te1 k1) (State e1' te1' k1') (N x) (N x') ->
+  heap_lo_equiv m1 m1' (A x) (A x') ->
+  Clight.eval_expr ge e1 te1 m1 e v ->
+  Clight.eval_expr ge e1' te1' m1' e v' ->
+  v = v'.
+Admitted.
+
+Lemma ifc_set{T: Type}:
+forall Delta id P Q R (N: T -> stack_clsf) (A: T -> heap_clsf) (e2: expr) l2 t v,
+  typeof_temp Delta id = Some t ->
+  is_neutral_cast (implicit_deref (typeof e2)) t = true ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     local (`(eq (v x)) (eval_expr e2))) ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     tc_expr Delta e2) ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     !! (clsf_expr (N x) e2 = Some (l2 x))) ->
+  ifc_def T Delta
+    (fun x => (|>PROPx (P x) (LOCALx (Q x) (SEPx (R x))))) N A
+    (Sset id e2)
+    (fun x => (normal_ret_assert (PROPx (P x) 
+           (LOCALx (temp id (v x) :: remove_localdef_temp id (Q x)) (SEPx (R x))))))
+    (normalPostClsf (fun x i => if Pos.eqb i id then l2 x else N x i))
+    (normalPostClsf A).
+Proof.
+  introv EqT Nc Ev0 Tc Cl. rename v into v0.
+  unfold ifc_def. split.
+  - intros x. apply* semax_SC_set.
+  - unfold ifc_core. unfold simple_ifc.
+    introv Sat Sat' SE HE Star Star'.
+    assert (ek = EK_normal) by admit. assert (ek' = EK_normal) by admit. (* <-- TODO *)
+    subst ek ek'. simpl exit_cont in *.
+    apply invert_set_too_strong in Star.
+    apply invert_set_too_strong in Star'.
+    destruct Star as [? [? [v [? Ev]]]]. subst e0 m2 te2.
+    destruct Star' as [? [? [v' [? Ev']]]]. subst e2' m2' te2'.
+    unfold normalPostClsf. simpl.
+    refine (conj eq_refl (conj _ (conj _ HE))).
+    + admit. (* same_Noneness *)
+    + pose proof SE as SE0. unfold stack_lo_equiv in SE. destruct SE as [E SE]. refine (conj E _).
+      unfold gen_lo_equiv. intros l Lo1 Lo2.
+      do 2 rewrite PTree.gsspec. destruct (peq l id) as [Eq | Ne].
+      * subst l. simpl in Lo1, Lo2. rewrite Pos.eqb_refl in *.
+        f_equal. eapply clsf_expr_sound;
+          [ exact Cl | exact Sat | exact Sat' | .. ]; eassumption.
+      * rewrite <- Pos.eqb_neq in Ne. rewrite Ne in Lo1, Lo2. apply SE; assumption.
 Qed.
 
 Lemma ifc_store{T: Type}:

@@ -15,6 +15,7 @@ Require Export floyd.base.
 Require Export floyd.canon.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
+Require Import floyd.client_lemmas.
 Require Export ifc.clsf_expr.
 Require Import List. Import ListNotations.
 
@@ -225,6 +226,23 @@ Axiom ifc_pre: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- !! (lle (N1 x) (N1' x) /\ lle (A1 x) (A1' x))) ->
   ifc_def T Delta P1' N1' A1' c P2 N2 A2 ->
   ifc_def T Delta P1  N1  A1  c P2 N2 A2.
+
+Axiom ifc_set: forall Delta id P Q R (N: T -> stack_clsf) (A: T -> heap_clsf) (e2: expr) l2 t v,
+  typeof_temp Delta id = Some t ->
+  is_neutral_cast (implicit_deref (typeof e2)) t = true ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     local (`(eq (v x)) (eval_expr e2))) ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     tc_expr Delta e2) ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     !! (clsf_expr (N x) e2 = Some (l2 x))) ->
+  ifc_def T Delta
+    (fun x => (|>PROPx (P x) (LOCALx (Q x) (SEPx (R x))))) N A
+    (Sset id e2)
+    (fun x => (normal_ret_assert (PROPx (P x) 
+           (LOCALx (temp id (v x) :: remove_localdef_temp id (Q x)) (SEPx (R x))))))
+    (normalPostClsf (fun x i => if Pos.eqb i id then l2 x else N x i))
+    (normalPostClsf A).
 
 Axiom ifc_store:
     forall Delta sh n (p: T -> val) P Q R (e1 e2 : expr)

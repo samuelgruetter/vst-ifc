@@ -337,6 +337,41 @@ Proof.
 Qed.
 *)
 
+(*
+Lemma no_add_skip: forall n2 n1 ge e te k m e' te' m' s2 m2,
+  corestepN cl_core_sem ge n1 (State e te k) m s2 m2 ->
+  corestepN cl_core_sem ge n2 s2 m2 (State e' te' (Kseq Sskip :: k)) m' ->
+  False.
+Proof.
+  intro n2. induction n2; intros.
+  - inversion H0. subst. unfold corestepN in H0.
+*)
+
+Lemma no_add_skip: forall n ge e te k m e' te' m',
+  corestepN cl_core_sem ge n (State e te k) m (State e' te' (Kseq Sskip :: k)) m' ->
+  False.
+Proof.
+  intro n. induction n; intros.
+  - inversion H. eapply blah. symmetry. eassumption.
+  - simpl in H. destruct H as [c2 [m2 [Step Star]]].
+Abort.
+
+Lemma invert_no_step: forall ge e te k e' te' m m',
+  star ge (State e te (Kseq Sskip :: k)) m (State e' te' (Kseq Sskip :: k)) m' ->
+  m' = m /\ e' = e /\ te' = te.
+Proof.
+  intros. unfold star, corestep_star in H. destruct H as [n Step].
+  destruct n.
+  - simpl in Step. inversion Step. auto.
+  - simpl in Step. destruct Step as [c2 [m2 [Step Star]]].
+    inversion Step. subst.
+    assert (star ge (State e te k) m (State e' te' (Kseq Sskip :: k)) m') as Step2. {
+      unfold star, corestep_star. exists (S n). simpl. eauto.
+    }
+    unfold star, corestep_star in Step2.
+    (* would need no_add_skip, which probably doesn't hold *)
+Abort.
+
 Lemma bigstep_null:
     forall ge e te e' te' m m' c',
     star ge (State e te []) m (State e' te' c') m' ->
@@ -371,3 +406,38 @@ Proof.
   do 4 eexists. eauto.
 Qed.
 *)
+
+Lemma invert_ifthenelse: forall ge e1 te1 m1 cond c1 c2 k s2 m2,
+  plus ge (State e1 te1 (Kseq (Sifthenelse cond c1 c2) :: k)) m1 s2 m2 ->
+  exists v b, Clight.eval_expr ge e1 te1 m1 cond v /\
+              Cop.bool_val v (typeof cond) m1 = Some b /\
+              star ge (State e1 te1 (Kseq (if b then c1 else c2) :: k)) m1 s2 m2.
+Proof.
+  introv Pl. apply invert_plus in Pl. destruct Pl as [s1' [m1' [Step Star]]].
+  inversion Step. subst. rename m1' into m1. eauto.
+Qed.
+
+Lemma invert_set: forall ge e1 te1 id e k m1 s2 m2,
+  plus ge (State e1 te1 (Kseq (Sset id e) :: k)) m1 s2 m2 ->
+  exists v, star ge (State e1 (PTree.set id v te1) k) m1 s2 m2 /\
+            Clight.eval_expr ge e1 te1 m1 e v.
+Proof.
+  introv Plus. apply invert_plus in Plus.
+  destruct Plus as [s11 [m11 [Step Star]]].
+  inversion Step. subst m11. subst. eauto.
+Qed.
+
+(* TODO doesn't hold because it needs star_null *)
+Lemma invert_set_too_strong: forall ge e1 te1 e2 te2 id e k m1 m2,
+  star ge (State e1 te1 (Kseq (Sset id e) :: k)) m1 (State e2 te2 k) m2 ->
+  e2 = e1 /\ m2 = m1 /\ 
+  exists v, te2 = (PTree.set id v te1) /\ Clight.eval_expr ge e1 te1 m1 e v.
+Proof.
+  introv Star. apply invert_star in Star.
+  destruct Star as [[Eq1 Eq2] | Plus].
+  - inversion Eq1. exfalso. eapply blah. eassumption.
+  - apply invert_plus in Plus. destruct Plus as [s11 [m11 [Step Star]]].
+    inversion Step. subst m11. subst.
+    eapply star_null in Star; [ | eauto ]. (* TODO star_null doesn't hold *)
+    destruct Star as [? [? ?]]. subst. eauto.
+Qed.

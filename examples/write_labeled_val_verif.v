@@ -7,9 +7,6 @@ Definition Vprog : varspecs.  mk_varspecs prog. Defined.
 
 Definition body: statement := ltac:(let r := eval simpl in f_write_labeled_val.(fn_body) in exact r).
 
-Axiom ifc_core0_always_holds: forall {T: Type} Delta P N A c P' N' A',
-  @ifc_core T Delta P N A c P' N' A'.
-
 (* alternative: give an explicit constructor name
 Record MyMetaVars: Type := mkMyMetaVars { v: int; b: int; highptr: val; lowptr: val }.
 Check (mkMyMetaVars Int.zero Int.zero Vundef Vundef).
