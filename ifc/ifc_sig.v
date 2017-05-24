@@ -105,6 +105,37 @@ Definition normalPostClsf{A Loc: Type}(Q: A -> Loc -> label)
 : A -> exitkind -> option val -> Loc -> label
 := fun (x: A) (ek: exitkind) (vl: option val) => if eq_dec ek EK_normal then Q x else bot.
 
+Definition loop1_ret_clsf{A Loc: Type}
+(Inv: A -> Loc -> label)(R: A -> exitkind -> option val -> Loc -> label)
+: A -> exitkind -> option val -> Loc -> label :=
+ fun x ek vl =>
+ match ek with
+ | EK_normal => match vl with
+   | None => Inv x
+   | _ => bot
+   end
+ | EK_break => R x EK_normal None
+ | EK_continue => match vl with
+   | None => Inv x
+   | _ => bot
+   end
+ | EK_return => R x EK_return vl
+ end.
+
+Definition loop2_ret_clsf{A Loc: Type}
+(Inv: A -> Loc -> label)(R: A -> exitkind -> option val -> Loc -> label)
+: A -> exitkind -> option val -> Loc -> label :=
+ fun x ek vl =>
+ match ek with
+ | EK_normal => match vl with
+   | None => Inv x
+   | _ => bot
+   end
+ | EK_break => bot
+ | EK_continue => bot
+ | EK_return => R x EK_return vl
+ end.
+
 Definition heap_loc_eq_val(hl: heap_loc)(v: val): bool := match hl, v with
 | (b1, i1), Vptr b2 i2 => Pos.eqb b1 b2 && Int.eq i1 i2
 | _, _ => false
@@ -160,10 +191,21 @@ Axiom ifc_ifthenelse: forall (Delta: tycontext)
   (P': T -> ret_assert) (N': T -> ret_stack_clsf) (A': T -> ret_heap_clsf),
   bool_type (typeof b) = true ->
   (forall x, ENTAIL Delta, P x |-- !! (clsf_expr (N x) b = Some Lo)) ->
-  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_true  (typeof b)) (eval_expr b))))) N A c1 P' N' A' ->
-  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_false (typeof b)) (eval_expr b))))) N A c2 P' N' A' ->
+  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_true  (typeof b)) (eval_expr b)))))
+          N A c1 P' N' A' ->
+  ifc_def T Delta (lft2 andp P (lft0 (local (`(typed_false (typeof b)) (eval_expr b)))))
+          N A c2 P' N' A' ->
   ifc_def T Delta (lft2 andp (lft0 (tc_expr Delta (Eunop Onotbool b tint))) P) N A
          (Sifthenelse b c1 c2) P' N' A'.
+
+Axiom ifc_loop: forall Delta Inv1P Inv1N Inv1A Inv2P Inv2N Inv2A incr body RetP RetN RetA,
+  ifc_def T Delta Inv1P Inv1N Inv1A
+    body
+    (lft2 loop1_ret_assert Inv2P RetP) (loop1_ret_clsf Inv2N RetN) (loop2_ret_clsf Inv2A RetA) ->
+  ifc_def T Delta Inv2P Inv2N Inv2A
+    incr
+    (lft2 loop2_ret_assert Inv1P RetP) (loop1_ret_clsf Inv1N RetN) (loop2_ret_clsf Inv1A RetA) ->
+  ifc_def T Delta Inv1P Inv1N Inv1A (Sloop body incr) RetP RetN RetA.
 
 Axiom ifc_return:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)

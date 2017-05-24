@@ -289,6 +289,20 @@ intro rho. apply andp_left2.
    need "(tc_expr ...) phi" where phi is an rmap *)
 Admitted.
 
+Lemma ifc_loop{T: Type}: forall Delta Inv1P Inv1N Inv1A Inv2P Inv2N Inv2A incr body RetP RetN RetA,
+  ifc_def T Delta Inv1P Inv1N Inv1A
+    body
+    (lft2 loop1_ret_assert Inv2P RetP) (loop1_ret_clsf Inv2N RetN) (loop2_ret_clsf Inv2A RetA) ->
+  ifc_def T Delta Inv2P Inv2N Inv2A
+    incr
+    (lft2 loop2_ret_assert Inv1P RetP) (loop1_ret_clsf Inv1N RetN) (loop2_ret_clsf Inv1A RetA) ->
+  ifc_def T Delta Inv1P Inv1N Inv1A (Sloop body incr) RetP RetN RetA.
+Proof.
+  introv Body Incr.
+  split_ifc_hyps. split.
+  - intro. apply* semax_loop.
+  - unfold ifc_core in *. unfold simple_ifc in *. introv Sat Sat' SE HE Star Star'.
+Admitted.
 
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
