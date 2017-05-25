@@ -218,6 +218,32 @@ Section RULES.
 Context {Espec : OracleKind}.
 Context {CS: compspecs}.
 
+Lemma sync_change_cont: forall ge k1 k2,
+  (forall e te m s3 m3,
+     cl_step ge (State e te k2) m s3 m3 <-> cl_step ge (State e te k1) m s3 m3) ->
+  forall e te e' te' m m',
+  sync ge e e' te te' m m' k1 ->
+  sync ge e e' te te' m m' k2.
+Proof.
+  introv Equiv Sy. unfold sync in *.
+  introv Star. destruct n as [|n].
+  - simpl in Star. inversion Star. subst s2 m2.
+    do 2 eexists. simpl. eapply (conj eq_refl). reflexivity.
+  - simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
+    edestruct Equiv as [Imp _].
+    specialize (Imp Step).
+    specialize (Sy s2 m2 (S n)).
+    spec Sy. {
+      simpl. exists s11 m11. eauto.
+    }
+    destruct Sy as [s2' [m2' [Star' CE]]].
+    simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
+    exists s2' m2'. refine (conj _ CE).
+    edestruct Equiv as [_ Imp'].
+    specialize (Imp' Step').
+    simpl. exists s11' m11'. eauto.
+Qed.
+
 Lemma ifc_seq{T: Type}:
   forall Delta h t
     (P1 P2: T -> environ -> mpred) (P3: T -> ret_assert)
@@ -234,25 +260,12 @@ Proof.
     intros k RG.
     cut (iguard (fun x : T => VST_to_state_pred (P1 x)) N1 A1
            (Kseq h :: Kseq t :: k)). {
-      unfold iguard. clear. introv G Sat Sat' SE HE Star.
-      unfold starN in Star.
-      destruct n as [|n].
-      - simpl in Star. inversion Star. subst s2 m2.
-        exists (State e1' te1' (Kseq (Ssequence h t) :: k)) m1'.
-        simpl. apply (conj eq_refl eq_refl).
-      - simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
-        inversion Step. subst.
-        specialize (G _ _ ge _ _ _ _ _ _ Sat Sat').
-        spec G. { eapply stack_lo_equiv_change_cmd. eassumption. }
-        specialize (G HE).
-        unfold sync in G.
-        specialize (G s2 m2 (S n)).
-        spec G. { unfold starN. simpl. eauto. }
-        destruct G as [s2' [m2' [Star' CE]]]. exists s2' m2'.
-        refine (conj _ CE).
-        simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
-        simpl. exists s11' m11'. refine (conj _ Star').
-        apply step_seq. apply Step'.
+      unfold iguard. clear. introv G Sat Sat' SE HE.
+      apply sync_change_cont with (k1 := (Kseq h :: Kseq t :: k)).
+      - clear. intros. split.
+        + intro. inversions H. assumption.
+        + intro. apply step_seq. assumption.
+      - apply* G.
     }
     apply H1i.
     unfold irguard, overridePost, overridePostClsf, lft2, VST_post_to_state_pred. intros.
@@ -266,21 +279,55 @@ Proof.
       unfold irguard in RG. specialize (RG ek vl). apply RG.
 Qed.
 
+Lemma sync_noop: forall ge e1 e1' te1 te1' m1 m1' c k,
+  cl_step ge (State e1  te1  (c :: k)) m1  (State e1  te1  k) m1  ->
+  cl_step ge (State e1' te1' (c :: k)) m1' (State e1' te1' k) m1' ->
+  sync ge e1 e1' te1 te1' m1 m1' k ->
+  sync ge e1 e1' te1 te1' m1 m1' (c :: k).
+Proof.
+  introv Step Step' Sy. unfold sync in *.
+  introv Star.
+  destruct n as [|n].
+  - simpl in Star. inversion Star. subst s2 m2.
+    do 2 eexists. simpl. unfold cont_eq. eapply (conj eq_refl). reflexivity.
+  - simpl in Star. destruct Star as [s11 [m11 [Step2 Star]]].
+    assert ((s11, m11) = ((State e1 te1 k), m1)) as E by apply* cl_corestep_fun.
+    inversions E. clear Step2.
+    specialize (Sy s2 m2 n Star).
+    destruct Sy as [s2' [m2' [Star' CE]]].
+    exists s2' m2'. refine (conj _ CE).
+    simpl. eauto.
+Qed.
+
 Lemma ifc_skip{T: Type}:
   forall Delta P N A,
   ifc_def T Delta P N A Sskip (lft1 normal_ret_assert P) (normalPostClsf N) (normalPostClsf A).
 Proof.
   intros. unfold ifc_def, ifc_core, simple_ifc. split.
   - intro x. apply semax_skip.
-  - introv Sat Sat' SE HE Star Star'.
-    eapply star_skip_elim in Star. destruct Star as [? [? [? [? ?]]]]; subst.
-    eapply star_skip_elim in Star'. destruct Star' as [? [? [? [? ?]]]]; subst.
-    refine (conj eq_refl (conj _ (conj _ _))).
-    + unfold same_Noneness. left. auto.
-    + unfold stack_lo_equiv.
-      unfold stack_lo_equiv in SE.
-      apply SE.
-    + apply HE.
+  - unfold irguard. intros k IG.
+    specialize (IG EK_normal None).
+    unfold normalPostClsf, VST_post_to_state_pred, lft1, normal_ret_assert in IG.
+    simpl in IG.
+    unfold iguard in *.
+    introv Sat Sat' SE HE.
+    apply sync_change_cont with (k1 := k).
+    + clear. intros. split.
+      * intro. inversions H. assumption.
+      * intro. apply step_skip. assumption.
+    + apply* IG.
+      * eapply VST_to_state_pred_commutes_imp; [ | eapply Sat ].
+        simpl. intro rho. apply andp_right.
+        -- apply prop_right. reflexivity.
+        -- apply andp_right.
+           ++ apply prop_right. reflexivity.
+           ++ apply derives_refl.
+      * eapply VST_to_state_pred_commutes_imp; [ | eapply Sat' ].
+        simpl. intro rho. apply andp_right.
+        -- apply prop_right. reflexivity.
+        -- apply andp_right.
+           ++ apply prop_right. reflexivity.
+           ++ apply derives_refl.
 Qed.
 
 Lemma ifc_seq_skip{T: Type}:
