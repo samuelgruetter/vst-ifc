@@ -93,9 +93,12 @@ Definition cont_eq (s s' : corestate): Prop :=
   | (State e te k), (State e' te' k') => k = k' 
   | _, _ => True end.
 
+Definition starN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
+  corestepN cl_core_sem.
+
 Definition sync (ge : genv) (e e' : env) (te te' : temp_env) (m m' : mem) (k : cont): Prop :=
-  forall s2 m2, star ge (State e te k) m s2 m2 ->
-    exists s2' m2', star ge (State e' te' k) m' s2' m2' /\ cont_eq s2 s2'.
+  forall s2 m2 n, starN ge n (State e te k) m s2 m2 ->
+    exists s2' m2', starN ge n (State e' te' k) m' s2' m2' /\ cont_eq s2 s2'.
 
 Definition iguard {A : Type}
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -196,27 +199,29 @@ Proof.
     cut (iguard (fun x : T => VST_to_state_pred (P1 x)) N1 A1
            (Kseq h :: Kseq t :: k)). {
       unfold iguard. clear. introv G Sat Sat' SE HE Star.
-      unfold star, corestep_star in Star. destruct Star as [n Star].
+      unfold starN in Star.
       destruct n as [|n].
       - simpl in Star. inversion Star. subst s2 m2.
         exists (State e1' te1' (Kseq (Ssequence h t) :: k)) m1'.
-        simpl. refine (conj _ eq_refl).
-        unfold star, corestep_star. exists O. simpl. reflexivity.
+        simpl. apply (conj eq_refl eq_refl).
       - simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
         inversion Step. subst.
         specialize (G _ _ ge _ _ _ _ _ _ Sat Sat').
         spec G. { eapply stack_lo_equiv_change_cmd. eassumption. }
         specialize (G HE).
         unfold sync in G.
-        specialize (G s2 m2).
-        spec G. { unfold star, corestep_star. exists (S n). simpl. eauto. }
-        destruct G as [s2' [m2' [Star' CE]]]. (* exists s2' m2'.
-        refine (conj _ CE). *)
-        unfold star, corestep_star in Star'. destruct Star' as [n' Star'].
-        destruct n' as [|n'].
-        + simpl in Star'. inversion Star'. subst s2' m2'.
-          (* first execution takes >0 steps, but second execution takes 0 steps,
-             kind of contradictory, but not really... *)
+        specialize (G s2 m2 (S n)).
+        spec G. { unfold starN. simpl. eauto. }
+        destruct G as [s2' [m2' [Star' CE]]]. exists s2' m2'.
+        refine (conj _ CE).
+        simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
+        simpl. exists s11' m11'. refine (conj _ Star').
+        apply step_seq. apply Step'.
+    }
+    apply H1i.
+    unfold irguard, overridePost, overridePostClsf, lft2, VST_post_to_state_pred. intros.
+    destruct (eq_dec ek EK_normal) as [E | NE].
+    + subst ek. simpl. Fail apply H2i.
 Admitted.
 (*
           destruct s2 as [e2 te2 k2|?].
