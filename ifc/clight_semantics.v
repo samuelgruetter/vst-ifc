@@ -18,6 +18,24 @@ Definition star: genv -> corestate -> mem -> corestate -> mem -> Prop :=
 Definition plus: genv -> corestate -> mem -> corestate -> mem -> Prop :=
   corestep_plus cl_core_sem.
 
+Lemma star_implication: forall ge s1 m1 s2 m2 s3 m3,
+  (cl_step ge s2 m2 s3 m3 -> cl_step ge s1 m1 s3 m3) ->
+  (star    ge s2 m2 s3 m3 -> star    ge s1 m1 s3 m3).
+Proof.
+  introv Imp Star. unfold star, corestep_star in *. destruct Star as [n Star].
+  destruct n as [|n].
+  - simpl in Star. inversion Star. subst.
+Abort. (* doesn't hold *)
+
+Lemma star_cons: forall ge s1 m1 s2 m2 s3 m3,
+  cl_step ge s1 m1 s2 m2 ->
+  star ge s2 m2 s3 m3 ->
+  star ge s1 m1 s3 m3.
+Proof.
+  introv Step Star. unfold star, corestep_star in *. destruct Star as [n Star].
+  exists (S n). simpl. eauto.
+Qed.
+
 Lemma star_seq_inv: forall ge e1 te1 e3 te3 h t m1 m3 c ek3 vl3,
   star ge (State e1 te1 (Kseq (Ssequence h t) :: c)) m1 (State e3 te3 (exit_cont ek3 vl3 c)) m3 ->
   exists e2 te2 m2 ek2 vl2,

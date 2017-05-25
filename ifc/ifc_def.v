@@ -110,7 +110,23 @@ Definition iguard {A : Type}
    heap_lo_equiv  m1 m1' (preA x) (preA x') ->
    sync ge e1 e1' te1 te1' m1 m1' k.
 
+Definition irguard {A : Type}
+  (postP: A -> exitkind -> option val -> state_pred) (postN: A -> ret_stack_clsf)
+  (postA: A -> ret_heap_clsf) (k: cont): Prop
+:= forall (ek: exitkind) (vl: option val),
+  iguard (fun (x: A) => postP x ek vl)
+         (fun (x: A) => postN x ek vl)
+         (fun (x: A) => postA x ek vl)
+         (exit_cont ek vl k).
+
 Definition simple_ifc {A : Type} (Delta: tycontext)
+  (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
+  (c: statement)
+  (postP: A -> exitkind -> option val -> state_pred) (postN: A -> ret_stack_clsf)
+  (postA: A -> ret_heap_clsf)
+:= forall (k: cont), irguard postP postN postA k -> iguard preP preN preA (Kseq c :: k).
+
+Definition simple_ifc_old {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
   (postN: A -> ret_stack_clsf) (postA: A -> ret_heap_clsf)
@@ -142,7 +158,7 @@ Definition ifc_core {A: Type} (Delta: tycontext)
   (postP: A -> ret_assert) (postN: A -> ret_stack_clsf) (postA: A -> ret_heap_clsf)
 := let preP'  := fun (x: A) => VST_to_state_pred (preP x) in
    let postP' := fun (x: A) => VST_post_to_state_pred (postP x) in
-   simple_ifc Delta preP' preN preA c postN postA.
+   simple_ifc Delta preP' preN preA c postP' postN postA.
 
 Definition ifc_def (A: Type) {cs: compspecs} {Espec: OracleKind} (Delta: tycontext)
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -176,6 +192,68 @@ Proof.
   introv H1 H2. split_ifc_hyps. split.
   - intro. apply* semax_seq.
   - unfold ifc_core, simple_ifc in *.
+    intros k RG.
+    cut (iguard (fun x : T => VST_to_state_pred (P1 x)) N1 A1
+           (Kseq h :: Kseq t :: k)). {
+      unfold iguard. clear. introv G Sat Sat' SE HE Star.
+      unfold star, corestep_star in Star. destruct Star as [n Star].
+      destruct n as [|n].
+      - simpl in Star. inversion Star. subst s2 m2.
+        exists (State e1' te1' (Kseq (Ssequence h t) :: k)) m1'.
+        simpl. refine (conj _ eq_refl).
+        unfold star, corestep_star. exists O. simpl. reflexivity.
+      - simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
+        inversion Step. subst.
+        specialize (G _ _ ge _ _ _ _ _ _ Sat Sat').
+        spec G. { eapply stack_lo_equiv_change_cmd. eassumption. }
+        specialize (G HE).
+        unfold sync in G.
+        specialize (G s2 m2).
+        spec G. { unfold star, corestep_star. exists (S n). simpl. eauto. }
+        destruct G as [s2' [m2' [Star' CE]]]. (* exists s2' m2'.
+        refine (conj _ CE). *)
+        unfold star, corestep_star in Star'. destruct Star' as [n' Star'].
+        destruct n' as [|n'].
+        + simpl in Star'. inversion Star'. subst s2' m2'.
+          (* first execution takes >0 steps, but second execution takes 0 steps,
+             kind of contradictory, but not really... *)
+Admitted.
+(*
+          destruct s2 as [e2 te2 k2|?].
+          * simpl in *. subst k2. CE.
+          exists (State e1' te1' (Kseq (Ssequence h t) :: k)) m1'.
+          simpl. refine (conj _ eq_refl).
+          unfold star, corestep_star. exists O. simpl. reflexivity.
+      - simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
+        inversion Step. subst.
+        specialize (G _ _ ge _ _ _ _ _ _ Sat Sat').
+        spec G. { eapply stack_lo_equiv_change_cmd. eassumption. }
+        specialize (G HE).
+        unfold sync in G.
+        specialize (G s2 m2).
+        spec G. { unfold star, corestep_star. exists (S n). simpl. eauto. }
+        destruct G as [s2' [m2' [Star' CE]]]. exists s2' m2'.
+        refine (conj _ CE).
+
+
+        
+        
+        
+        unfold star, corestep_star in Star2 |- *. destruct Star2 as [n2 Star2].
+        destruct n2 as [|n2].
+        + simpl in Star2. inversion Star2. subst.
+          exists (S n). simpl.
+        step_seq simpl.
+  exists (S n). simpl. eauto.
+        eapply star_cons; [ | eapply Star2 ]. constructor.
+
+
+
+         exact G.
+          do 2 eexists. split. exact H7. St eauto. }
+    }
+    unfold iguard. introv Sat Sat' SE HE.
+    unfold sync. introv Star.
     intros x x' ge e1 e1' e3 e3' te1 te1' te3 te3' m1 m1' m3 m3' c'.
     introv Sat1 Sat1' SE1 HE1 Star1 Star1'.
     apply star_seq_inv in Star1.
@@ -234,6 +312,7 @@ Proof.
         apply (conj SE2 HE2). }
 Grab Existential Variables. exact nil. exact nil. exact nil. exact nil.
 Qed.
+*)
 
 Lemma ifc_skip{T: Type}:
   forall Delta P N A,
