@@ -88,6 +88,28 @@ Qed.
 Definition same_Noneness{T: Type}(o1 o2: option T): Prop :=
   (o1 = None /\ o2 = None) \/ exists v1 v2, o1 = Some v1 /\ o2 = Some v2.
 
+Definition cont_eq (s s' : corestate): Prop :=
+  match s, s' with
+  | (State e te k), (State e' te' k') => k = k' 
+  | _, _ => True end.
+
+Definition sync (ge : genv) (e e' : env) (te te' : temp_env) (m m' : mem) (k : cont): Prop :=
+  forall s2 m2, star ge (State e te k) m s2 m2 ->
+    exists s2' m2', star ge (State e' te' k) m' s2' m2' /\ cont_eq s2 s2'.
+
+Definition iguard {A : Type}
+  (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
+  (k: cont)
+:= forall (x x': A) (ge: genv) (e1 e1': env) (te1 te1': temp_env)
+          (m1 m1': mem),
+   preP x  e1 te1 m1 ->
+   preP x' e1' te1' m1' ->
+   let s1  := (State e1  te1  k) in
+   let s1' := (State e1' te1' k) in
+   stack_lo_equiv s1 s1' (preN x) (preN x') ->
+   heap_lo_equiv  m1 m1' (preA x) (preA x') ->
+   sync ge e1 e1' te1 te1' m1 m1' k.
+
 Definition simple_ifc {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
