@@ -88,6 +88,10 @@ Qed.
 Definition same_Noneness{T: Type}(o1 o2: option T): Prop :=
   (o1 = None /\ o2 = None) \/ exists v1 v2, o1 = Some v1 /\ o2 = Some v2.
 
+(* TODO doesn't hold *)
+Axiom Delta_always_typechecks: forall Delta P Q,
+  ENTAIL Delta, P |-- Q -> P |-- Q.
+
 Definition cont_eq (s s' : corestate): Prop :=
   match s, s' with
   | (State e te k), (State e' te' k') => k = k' 
@@ -112,6 +116,38 @@ Definition iguard {A : Type}
    stack_lo_equiv s1 s1' (preN x) (preN x') ->
    heap_lo_equiv  m1 m1' (preA x) (preA x') ->
    sync ge e1 e1' te1 te1' m1 m1' k.
+
+Lemma weaken_iguard{T : Type}: forall Delta (P1 P1': T -> pre_assert) N1 N1' A1 A1' k,
+  (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
+  (forall x, ENTAIL Delta, P1 x |-- !! (lle (N1 x) (N1' x) /\ lle (A1 x) (A1' x))) ->
+  iguard (lft1 VST_to_state_pred P1') N1' A1' k ->
+  iguard (lft1 VST_to_state_pred P1) N1 A1 k.
+Proof.
+  introv Imp Le IG. unfold iguard in *.
+  introv Sat Sat' SE HE.
+  pose proof (VST_to_state_pred_commutes_imp' _ _ _ (Imp x) _ _ _ Sat) as Sat0.
+  pose proof (VST_to_state_pred_commutes_imp' _ _ _ (Imp x') _ _ _ Sat') as Sat'0.
+  pose proof (VST_to_state_pred_commutes_imp _ _
+             (Delta_always_typechecks _ _ _ (Le x)) _ _ _ Sat) as Sat00.
+  pose proof (VST_to_state_pred_commutes_imp _ _
+             (Delta_always_typechecks _ _ _ (Le x')) _ _ _ Sat') as Sat'00.
+  rewrite VST_indep_state_pred in Sat00. destruct Sat00 as [LeA LeN].
+  rewrite VST_indep_state_pred in Sat'00. destruct Sat'00 as [LeA' LeN'].
+  eapply IG.
+  - eapply Sat0.
+  - eapply Sat'0.
+  - apply* weaken_stack_lo_equiv.
+  - apply* weaken_heap_lo_equiv.
+Qed.
+
+Lemma weaken_iguard0{T : Type}: forall Delta (P1 P1': T -> pre_assert) N1 A1 k,
+  (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
+  iguard (lft1 VST_to_state_pred P1') N1 A1 k ->
+  iguard (lft1 VST_to_state_pred P1) N1 A1 k.
+Proof.
+  introv Imp IG. eapply weaken_iguard; [ eapply Imp | | eapply IG ].
+  intro. apply prop_right. split; apply lle_refl.
+Qed.
 
 Definition irguard {A : Type}
   (postP: A -> exitkind -> option val -> state_pred) (postN: A -> ret_stack_clsf)
@@ -221,103 +257,14 @@ Proof.
     apply H1i.
     unfold irguard, overridePost, overridePostClsf, lft2, VST_post_to_state_pred. intros.
     destruct (eq_dec ek EK_normal) as [E | NE].
-    + subst ek. simpl. Fail apply H2i.
-Admitted.
-(*
-          destruct s2 as [e2 te2 k2|?].
-          * simpl in *. subst k2. CE.
-          exists (State e1' te1' (Kseq (Ssequence h t) :: k)) m1'.
-          simpl. refine (conj _ eq_refl).
-          unfold star, corestep_star. exists O. simpl. reflexivity.
-      - simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
-        inversion Step. subst.
-        specialize (G _ _ ge _ _ _ _ _ _ Sat Sat').
-        spec G. { eapply stack_lo_equiv_change_cmd. eassumption. }
-        specialize (G HE).
-        unfold sync in G.
-        specialize (G s2 m2).
-        spec G. { unfold star, corestep_star. exists (S n). simpl. eauto. }
-        destruct G as [s2' [m2' [Star' CE]]]. exists s2' m2'.
-        refine (conj _ CE).
-
-
-        
-        
-        
-        unfold star, corestep_star in Star2 |- *. destruct Star2 as [n2 Star2].
-        destruct n2 as [|n2].
-        + simpl in Star2. inversion Star2. subst.
-          exists (S n). simpl.
-        step_seq simpl.
-  exists (S n). simpl. eauto.
-        eapply star_cons; [ | eapply Star2 ]. constructor.
-
-
-
-         exact G.
-          do 2 eexists. split. exact H7. St eauto. }
-    }
-    unfold iguard. introv Sat Sat' SE HE.
-    unfold sync. introv Star.
-    intros x x' ge e1 e1' e3 e3' te1 te1' te3 te3' m1 m1' m3 m3' c'.
-    introv Sat1 Sat1' SE1 HE1 Star1 Star1'.
-    apply star_seq_inv in Star1.
-    apply star_seq_inv in Star1'.
-    destruct Star1  as [e2  [te2  [m2  [ek2  [vl2  [Star1  [Star2  EE ]]]]]]].
-    destruct Star1' as [e2' [te2' [m2' [ek2' [vl2' [Star1' [Star2' EE']]]]]]].
-    edestruct H1i as [Eek [Nvl [SE2 HE2]]].
-    + eapply Sat1.
-    + eapply Sat1'.
-    + apply* stack_lo_equiv_change_cmd.
-    + exact HE1.
-    + exact Star1.
-    + exact Star1'.
-    + clear H1i. subst ek2'.
-      destruct ek2.
-      { pose proof (VST_sound _ _ _ _ EK_normal vl2 (Kseq t :: c') (H1s x)) as C.
-        pose proof (VST_sound _ _ _ _ EK_normal vl2' (Kseq t :: c') (H1s x')) as C'.
-        unfold lft2 in C, C'.
-        erewrite VST_overridePost_to_state_pred in C, C'.
-        eapply H2i.
-        * edestruct C as [? ?]; eassumption.
-        * edestruct C' as [? ?]; eassumption.
-        * apply* stack_lo_equiv_change_cmd.
-        * exact HE2.
-        * exact Star2.
-        * exact Star2'. }
-      { unfold overridePostClsf in *; simpl in *.
-        destruct EE  as [? | [? ?]]; [discriminate | subst ek  vl2  ].
-        destruct EE' as [? | [? ?]]; [discriminate | subst ek' vl2' ].
-        refine (conj eq_refl (conj Nvl _)).
-        simpl exit_cont in *.
-        eapply star_null in Star2 ; [ | eapply (conj eq_refl eq_refl) ].
-        eapply star_null in Star2'; [ | eapply (conj eq_refl eq_refl) ].
-        destruct Star2  as [? [? ?]]; subst e2  te2  m2 .
-        destruct Star2' as [? [? ?]]; subst e2' te2' m2'.
-        apply (conj SE2 HE2). }
-      { unfold overridePostClsf in *; simpl in *.
-        destruct EE  as [? | [? ?]]; [discriminate | subst ek  vl2  ].
-        destruct EE' as [? | [? ?]]; [discriminate | subst ek' vl2' ].
-        refine (conj eq_refl (conj Nvl _)).
-        simpl exit_cont in *.
-        eapply star_null in Star2 ; [ | eapply (conj eq_refl eq_refl) ].
-        eapply star_null in Star2'; [ | eapply (conj eq_refl eq_refl) ].
-        destruct Star2  as [? [? ?]]; subst e2  te2  m2 .
-        destruct Star2' as [? [? ?]]; subst e2' te2' m2'.
-        apply (conj SE2 HE2). }
-      { unfold overridePostClsf in *; simpl in *.
-        destruct EE  as [? | [? ?]]; [discriminate | subst ek  vl2  ].
-        destruct EE' as [? | [? ?]]; [discriminate | subst ek' vl2' ].
-        refine (conj eq_refl (conj Nvl _)).
-        simpl exit_cont in *.
-        eapply star_null in Star2 ; [ | eapply (conj eq_refl eq_refl) ].
-        eapply star_null in Star2'; [ | eapply (conj eq_refl eq_refl) ].
-        destruct Star2  as [? [? ?]]; subst e2  te2  m2 .
-        destruct Star2' as [? [? ?]]; subst e2' te2' m2'.
-        apply (conj SE2 HE2). }
-Grab Existential Variables. exact nil. exact nil. exact nil. exact nil.
+    + subst ek. simpl. eapply weaken_iguard0; [ | eapply H2i ].
+      * instantiate (1 := Delta). intro. apply andp_left2. simpl. intro rho.
+        apply andp_left2. apply derives_refl.
+      * exact RG.
+    + replace (exit_cont ek vl (Kseq t :: k)) with (exit_cont ek vl k)
+        by (destruct ek; simpl; congruence).
+      unfold irguard in RG. specialize (RG ek vl). apply RG.
 Qed.
-*)
 
 Lemma ifc_skip{T: Type}:
   forall Delta P N A,
@@ -455,10 +402,6 @@ Proof.
     rewrite Eqk in Eqk0. inversion Eqk0. subst optid'0 f'0 ve'0 te'0 k'0. clear Eqk0.
      TODO... *)
 Admitted.
-
-(* TODO doesn't hold *)
-Axiom Delta_always_typechecks: forall Delta P Q,
-  ENTAIL Delta, P |-- Q -> P |-- Q.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
