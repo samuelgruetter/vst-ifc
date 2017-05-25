@@ -214,6 +214,22 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
+Definition syncPlus (ge : genv) (e e' : env) (te te' : temp_env) (m m' : mem) (k : cont): Prop :=
+  forall s2 m2 n, starN ge (S n) (State e te k) m s2 m2 ->
+    exists s2' m2', starN ge (S n) (State e' te' k) m' s2' m2' /\ cont_eq s2 s2'.
+
+Lemma sync_syncPlus:
+  forall (ge : genv) (e e' : env) (te te' : temp_env) (m m' : mem) (k : cont),
+  sync ge e e' te te' m m' k <-> syncPlus ge e e' te te' m m' k.
+Proof.
+  unfold syncPlus, sync. split.
+  + introv Sy Star. apply* Sy.
+  + introv Sp Star. destruct n as [|n].
+    - simpl in Star. inversion Star. subst s2 m2.
+      do 2 eexists. simpl. eapply (conj eq_refl). reflexivity.
+    - apply* Sp.
+Qed.
+
 Section RULES.
 Context {Espec : OracleKind}.
 Context {CS: compspecs}.
@@ -225,23 +241,41 @@ Lemma sync_change_cont: forall ge k1 k2,
   sync ge e e' te te' m m' k1 ->
   sync ge e e' te te' m m' k2.
 Proof.
-  introv Equiv Sy. unfold sync in *.
-  introv Star. destruct n as [|n].
-  - simpl in Star. inversion Star. subst s2 m2.
+  introv Equiv Sy. rewrite sync_syncPlus. unfold syncPlus. unfold sync in Sy.
+  introv Star.
+  simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
+  edestruct Equiv as [Imp _].
+  specialize (Imp Step).
+  specialize (Sy s2 m2 (S n)).
+  spec Sy. {
+    simpl. exists s11 m11. eauto.
+  }
+  destruct Sy as [s2' [m2' [Star' CE]]].
+  simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
+  exists s2' m2'. refine (conj _ CE).
+  edestruct Equiv as [_ Imp'].
+  specialize (Imp' Step').
+  simpl. exists s11' m11'. eauto.
+Qed.
+
+Lemma sync_step: forall ge e1 e1' te1 te1' m1 m1' k1 e2 e2' te2 te2' m2 m2' k2,
+  cl_step ge (State e1  te1  k1) m1  (State e2  te2  k2) m2  ->
+  cl_step ge (State e1' te1' k1) m1' (State e2' te2' k2) m2' ->
+  sync ge e2 e2' te2 te2' m2 m2' k2 ->
+  sync ge e1 e1' te1 te1' m1 m1' k1.
+Proof.
+  introv Step Step' Sy. unfold sync in *.
+  intros s3 m3 n Star.
+  destruct n as [|n].
+  - simpl in Star. inversion Star. subst s3 m3.
     do 2 eexists. simpl. eapply (conj eq_refl). reflexivity.
-  - simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
-    edestruct Equiv as [Imp _].
-    specialize (Imp Step).
-    specialize (Sy s2 m2 (S n)).
-    spec Sy. {
-      simpl. exists s11 m11. eauto.
-    }
-    destruct Sy as [s2' [m2' [Star' CE]]].
-    simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
-    exists s2' m2'. refine (conj _ CE).
-    edestruct Equiv as [_ Imp'].
-    specialize (Imp' Step').
-    simpl. exists s11' m11'. eauto.
+  - simpl in Star. destruct Star as [s11 [m11 [Step2 Star]]].
+    assert ((s11, m11) = ((State e2 te2 k2), m2)) as E by apply* cl_corestep_fun.
+    inversions E. clear Step2.
+    specialize (Sy _ _ _ Star).
+    destruct Sy as [s3' [m3' [Star' CE]]].
+    exists s3' m3'. refine (conj _ CE).
+    simpl. exists (State e2' te2' k2) m2'. eauto.
 Qed.
 
 Lemma ifc_seq{T: Type}:
@@ -277,26 +311,6 @@ Proof.
     + replace (exit_cont ek vl (Kseq t :: k)) with (exit_cont ek vl k)
         by (destruct ek; simpl; congruence).
       unfold irguard in RG. specialize (RG ek vl). apply RG.
-Qed.
-
-Lemma sync_noop: forall ge e1 e1' te1 te1' m1 m1' c k,
-  cl_step ge (State e1  te1  (c :: k)) m1  (State e1  te1  k) m1  ->
-  cl_step ge (State e1' te1' (c :: k)) m1' (State e1' te1' k) m1' ->
-  sync ge e1 e1' te1 te1' m1 m1' k ->
-  sync ge e1 e1' te1 te1' m1 m1' (c :: k).
-Proof.
-  introv Step Step' Sy. unfold sync in *.
-  introv Star.
-  destruct n as [|n].
-  - simpl in Star. inversion Star. subst s2 m2.
-    do 2 eexists. simpl. unfold cont_eq. eapply (conj eq_refl). reflexivity.
-  - simpl in Star. destruct Star as [s11 [m11 [Step2 Star]]].
-    assert ((s11, m11) = ((State e1 te1 k), m1)) as E by apply* cl_corestep_fun.
-    inversions E. clear Step2.
-    specialize (Sy s2 m2 n Star).
-    destruct Sy as [s2' [m2' [Star' CE]]].
-    exists s2' m2'. refine (conj _ CE).
-    simpl. eauto.
 Qed.
 
 Lemma ifc_skip{T: Type}:
@@ -336,6 +350,18 @@ Lemma ifc_seq_skip{T: Type}:
 Proof.
 Admitted.
 
+Lemma eval_bool_true: forall b bb ge e1 te1 m1,
+  Clight.eval_expr ge e1 te1 m1 b bb ->
+  Cop.bool_val bb (typeof b) m1 = Some true ->
+  VST_to_state_pred (local (` (typed_true (typeof b)) (eval_expr b))) e1 te1 m1.
+Admitted.
+
+Lemma eval_bool_false: forall b bb ge e1 te1 m1,
+  Clight.eval_expr ge e1 te1 m1 b bb ->
+  Cop.bool_val bb (typeof b) m1 = Some false ->
+  VST_to_state_pred (local (` (typed_false (typeof b)) (eval_expr b))) e1 te1 m1.
+Admitted.
+
 Lemma ifc_ifthenelse: forall {T: Type} (Delta: tycontext) 
   (P: T -> pre_assert) (N: T -> stack_clsf) (A: T -> heap_clsf)
   (b: expr) (c1 c2: statement)
@@ -354,32 +380,50 @@ Proof.
   - (* VST part *)
     intro x. unfold lft0, lft2 in *. apply* semax_ifthenelse.
   - unfold ifc_core in *. unfold simple_ifc in *.
-    introv Sat Sat' SE1 HE1 Star Star'.
-    apply invert_star in Star. apply invert_star in Star'.
-    destruct Star as [E | Plus]; destruct Star' as [E' | Plus'].
-    (* cases where at least one doesn't step, annoying *)
-    + admit.
-    + admit.
-    + admit.
-    (* case where both do at least one step: *)
-    + apply invert_ifthenelse in Plus . destruct Plus  as [b0  [b00  [Ev  [Bv  Star ]]]].
-      apply invert_ifthenelse in Plus'. destruct Plus' as [b0' [b00' [Ev' [Bv' Star']]]].
-      assert (b00 = b00') as EqCond by admit. (* TODO obtain this from Cl *)
-      subst b00'.
-      destruct b00.
-      * apply* B1i.
-        { eapply VST_to_state_pred_commutes_imp'; [ | eapply Sat ]. instantiate (1 := Delta).
-          unfold lft0, lft2 in *.
-          apply andp_right.
-          - do 2 apply andp_left2. apply derives_refl.
-          - rewrite <- andp_assoc. apply andp_left1.
-unfold local, liftx, lift1, lift. simpl.
-unfold typed_true.
-intro rho. apply andp_left2. 
-
-(* here, we have "tc_expr ... |-- ", but in strict_bool_val_eval_expr int vst_ifthenelse.v, we
-   need "(tc_expr ...) phi" where phi is an rmap *)
-Admitted.
+    intros k RG.
+    specialize (B1i k RG). specialize (B2i k RG).
+    unfold iguard in *.
+    introv Sat Sat' SE HE.
+    rewrite sync_syncPlus. unfold syncPlus. introv Star. simpl in Star.
+    destruct Star as [s11 [m11 [Step Star]]].
+    inversion Step. subst m11. subst. rename v1 into bb, H8 into Ev, H9 into Bv, b0 into bbb.
+    assert (Bv' : Cop.bool_val bb (typeof b) m1' = Some bbb) by admit. (* TODO by Lo-eq *)
+    assert (Ev' : Clight.eval_expr ge e1' te1' m1' b bb) by admit. (* TODO by Lo-eq *)
+    specialize (B1i x x' ge e1 e1' te1 te1' m1 m1').
+    specialize (B2i x x' ge e1 e1' te1 te1' m1 m1').
+    unfold lft0, lft2 in *. repeat rewrite VST_to_state_pred_and in *.
+    destruct Sat as [Tcb Sat]. destruct Sat' as [Tcb' Sat'].
+    destruct bbb.
+    + (* then-branch *)
+      clear B2s B2i.
+      unfold lft0, lft2 in *. repeat rewrite VST_to_state_pred_and in *.
+      spec B1i. { apply (conj Sat). apply* eval_bool_true. }
+      spec B1i. { apply (conj Sat'). apply* eval_bool_true. }
+      spec B1i. { apply* stack_lo_equiv_change_cmd. }
+      specialize (B1i HE).
+      unfold sync in B1i.
+      specialize (B1i _ _ _ Star).
+      destruct B1i as [s2' [m2' [Star' CE]]].
+      exists s2' m2'. refine (conj _ CE).
+      simpl. do 2 eexists. split.
+      * apply* step_ifthenelse.
+      * simpl. apply Star'.
+    + (* else-branch *)
+      clear B1s B1i.
+      unfold lft0, lft2 in *. repeat rewrite VST_to_state_pred_and in *.
+      spec B2i. { apply (conj Sat). apply* eval_bool_false. }
+      spec B2i. { apply (conj Sat'). apply* eval_bool_false. }
+      spec B2i. { apply* stack_lo_equiv_change_cmd. }
+      specialize (B2i HE).
+      unfold sync in B2i.
+      specialize (B2i _ _ _ Star).
+      destruct B2i as [s2' [m2' [Star' CE]]].
+      exists s2' m2'. refine (conj _ CE).
+      simpl. do 2 eexists. split.
+      * apply* step_ifthenelse.
+      * simpl. apply Star'.
+Grab Existential Variables. apply nil. apply nil. apply nil. apply nil.
+Qed.
 
 Lemma ifc_loop{T: Type}: forall Delta Inv1P Inv1N Inv1A Inv2P Inv2N Inv2A incr body RetP RetN RetA,
   ifc_def T Delta Inv1P Inv1N Inv1A
