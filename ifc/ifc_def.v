@@ -437,13 +437,30 @@ Proof.
   introv Body Incr.
   split_ifc_hyps. split.
   - intro. apply* semax_loop.
-  - unfold ifc_core in *. unfold simple_ifc in *. introv Sat Sat' SE HE Star Star'.
+  - unfold ifc_core in *. unfold simple_ifc in *. intros k RG.
+    clear Bodys Incrs.
+    unfold irguard.
+    unfold iguard. introv Sat Sat' SE HE.
+    rewrite sync_syncPlus. unfold syncPlus.
+    introv Star. simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
+    inversion Step. subst s11 m11. subst.
+    (* specialize (Incri (* what? *)) *)
+
+    specialize (Bodyi (Kseq Scontinue :: Kloop1 body incr :: k)).
+    spec Bodyi. {
+      unfold irguard. intros ek vl.
+      unfold loop1_ret_assert, loop2_ret_assert, loop1_ret_clsf,
+             loop2_ret_clsf, lft2, VST_post_to_state_pred.
+      destruct ek; simpl.
+      + (* EK_normal *)
+
 Admitted.
 
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
         (retExpr: option expr) (retVal: option val),
-(* TODO this is an equality between two things of type "environ -> mpred", probably not what we want *)
+(* TODO this is an equality between two things of type "environ -> mpred", probably 
+not what we want *)
   (cast_expropt retExpr (ret_type Delta)) = `retVal ->
   ifc_def T Delta
           (fun (x: T) => tc_expropt Delta retExpr (ret_type Delta) &&
@@ -469,29 +486,7 @@ Proof.
       extensionality. f_equal. f_equal. apply H'.
     }
     rewrite E in C. clear E. apply C.
-  - introv Sat Sat' SE HE Star Star'.
-    apply invert_star in Star. destruct Star as [E | Plus].
-    + inversion E as [E2 E1]. inversion E2 as [[E3 E4 E5]].
-      (* note: inversion also rewrote "exit_cont ..." to "Kseq ... :: k" below the line *)
-      pose proof (return_exit_cont _ _ _ _ E5). subst.
-      apply invert_star in Star'. destruct Star' as [E' | Plus'].
-      * inversion E' as [E2' E1']. inversion E2' as [[E3' E4' E5']].
-        (* note: inversion also rewrote "exit_cont ..." to "Kseq ... :: k" below the line *)
-        pose proof (return_exit_cont _ _ _ _ E5'). subst.
-        refine (conj eq_refl (conj _ (conj _ _))).
-        { admit. } { Fail apply SE. (*
-
-
-      pose proof (return_exit_cont _ _ _ _ E5) as C.
-      destruct C as [E0 [Eq | [i [f [e [t [ k' Eq]]]]]]].
-      * subst. simpl in E5.
-    apply invert_star_return in Star .
-    destruct Star as [k' [te' [ve' [v' [f' [optid' [te'' [m11 [Eqk [Ekm [EqRe EqO]]]]]]]]]]].
-    apply invert_star_return in Star'.
-    destruct Star' as
-      [k'0 [te'0 [ve'0 [v'0 [f'0 [optid'0 [te''0 [m110 [Eqk0 [Ekm0 [EqRe0 EqO0]]]]]]]]]]].
-    rewrite Eqk in Eqk0. inversion Eqk0. subst optid'0 f'0 ve'0 te'0 k'0. clear Eqk0.
-     TODO... *)
+  - 
 Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
@@ -504,18 +499,11 @@ Proof.
   split_ifc_hyps. split.
   - intro. apply semax_pre with (P' := P1' x); auto.
   - unfold ifc_core, simple_ifc in *.
-    introv Sat Sat' SE HE. 
-    pose proof (VST_to_state_pred_commutes_imp' _ _ _ (E x) _ _ _ Sat) as Sat0.
-    pose proof (VST_to_state_pred_commutes_imp' _ _ _ (E x') _ _ _ Sat') as Sat'0.
-    pose proof (VST_to_state_pred_commutes_imp _ _
-           (Delta_always_typechecks _ _ _ (Imp x)) _ _ _ Sat) as Sat00.
-    pose proof (VST_to_state_pred_commutes_imp _ _
-           (Delta_always_typechecks _ _ _ (Imp x')) _ _ _ Sat') as Sat'00.
-    rewrite VST_indep_state_pred in Sat00. destruct Sat00 as [LeA LeN].
-    rewrite VST_indep_state_pred in Sat'00. destruct Sat'00 as [LeA' LeN'].
-    apply* Hi.
-    + apply* weaken_stack_lo_equiv.
-    + apply* weaken_heap_lo_equiv.
+    introv RG.
+    eapply weaken_iguard.
+    + exact E.
+    + exact Imp.
+    + apply Hi. apply RG.
 Qed.
 
 Lemma clsf_expr_sound{T: Type}: 
@@ -554,6 +542,8 @@ Proof.
   unfold ifc_def. split.
   - intros x. apply* semax_SC_set.
   - unfold ifc_core. unfold simple_ifc.
+Admitted.
+(*
     introv Sat Sat' SE HE Star Star'.
     assert (ek = EK_normal) by admit. assert (ek' = EK_normal) by admit. (* <-- TODO *)
     subst ek ek'. simpl exit_cont in *.
@@ -572,6 +562,7 @@ Proof.
           [ exact Cl | exact Sat | exact Sat' | .. ]; eassumption.
       * rewrite <- Pos.eqb_neq in Ne. rewrite Ne in Lo1, Lo2. apply SE; assumption.
 Qed.
+*)
 
 Lemma ifc_store{T: Type}:
     forall Delta sh n (p: T -> val) P Q R (e1 e2 : expr)
