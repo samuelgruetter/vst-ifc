@@ -92,17 +92,42 @@ Definition same_Noneness{T: Type}(o1 o2: option T): Prop :=
 Axiom Delta_always_typechecks: forall Delta P Q,
   ENTAIL Delta, P |-- Q -> P |-- Q.
 
-Definition cont_eq (s s' : corestate): Prop :=
+Definition cont'_equiv (k k' : cont'): Prop := match k, k' with
+  | Kseq s, Kseq s' => s = s'
+  | Kloop1 s1 s2, Kloop1 s1' s2' => s1 = s1' /\ s2 = s2'
+  | Kloop2 s1 s2, Kloop2 s1' s2' => s1 = s1' /\ s2 = s2'
+  | Kswitch, Kswitch => True
+  | Kcall i f e te, Kcall i' f' e' te' => i = i' /\ f = f' (* not requiring e = e' /\ te = te' *)
+  | _, _ => False
+  end.
+
+Lemma cont'_equiv_refl: forall k, cont'_equiv k k.
+Proof. intro k. unfold cont'_equiv. destruct k; auto. Qed.
+
+Fixpoint cont_equiv (k k': cont): Prop := match k, k' with
+  | h :: t, h' :: t' => cont'_equiv h h' /\ cont_equiv t t'
+  | nil, nil => True
+  | _, _ => False
+  end.
+
+Lemma cont_equiv_refl: forall k, cont_equiv k k.
+Proof. intro k. pose proof cont'_equiv_refl. induction k; simpl; auto. Qed.
+
+Definition cs_cont_equiv (s s' : corestate): Prop :=
   match s, s' with
-  | (State e te k), (State e' te' k') => k = k' 
+  | (State e te k), (State e' te' k') => cont_equiv k k'
   | _, _ => True end.
+
+Lemma cs_cont_equiv_refl: forall s, cs_cont_equiv s s.
+Proof. pose proof cont_equiv_refl. intro s; destruct s; simpl; auto. Qed.
 
 Definition starN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
   corestepN cl_core_sem.
 
-Definition sync (ge : genv) (e e' : env) (te te' : temp_env) (m m' : mem) (k : cont): Prop :=
-  forall s2 m2 n, starN ge n (State e te k) m s2 m2 ->
-    exists s2' m2', starN ge n (State e' te' k) m' s2' m2' /\ cont_eq s2 s2'.
+Definition sync (ge : genv) (s1 s1': corestate) (m1 m1' : mem): Prop :=
+  cs_cont_equiv s1 s1' ->
+  forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
+    exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
 
 Definition iguard {A : Type}
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -115,7 +140,7 @@ Definition iguard {A : Type}
    let s1' := (State e1' te1' k) in
    stack_lo_equiv s1 s1' (preN x) (preN x') ->
    heap_lo_equiv  m1 m1' (preA x) (preA x') ->
-   sync ge e1 e1' te1 te1' m1 m1' k.
+   sync ge s1 s1' m1 m1'.
 
 Lemma weaken_iguard{T : Type}: forall Delta (P1 P1': T -> pre_assert) N1 N1' A1 A1' k,
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
@@ -214,19 +239,20 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
-Definition syncPlus (ge : genv) (e e' : env) (te te' : temp_env) (m m' : mem) (k : cont): Prop :=
-  forall s2 m2 n, starN ge (S n) (State e te k) m s2 m2 ->
-    exists s2' m2', starN ge (S n) (State e' te' k) m' s2' m2' /\ cont_eq s2 s2'.
+Definition syncPlus (ge : genv) (s1 s1': corestate) (m1 m1' : mem): Prop :=
+  cs_cont_equiv s1 s1' ->
+  forall s2 m2 n, starN ge (S n) s1 m1 s2 m2 ->
+    exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
 
 Lemma sync_syncPlus:
-  forall (ge : genv) (e e' : env) (te te' : temp_env) (m m' : mem) (k : cont),
-  sync ge e e' te te' m m' k <-> syncPlus ge e e' te te' m m' k.
+  forall (ge : genv) (s s' : corestate) (m m' : mem),
+  sync ge s s' m m' <-> syncPlus ge s s' m m'.
 Proof.
   unfold syncPlus, sync. split.
-  + introv Sy Star. apply* Sy.
-  + introv Sp Star. destruct n as [|n].
+  + introv Sy CE Star. apply* Sy.
+  + introv Sp CE Star. destruct n as [|n].
     - simpl in Star. inversion Star. subst s2 m2.
-      do 2 eexists. simpl. eapply (conj eq_refl). reflexivity.
+      do 2 eexists. simpl. eauto.
     - apply* Sp.
 Qed.
 
@@ -234,18 +260,21 @@ Section RULES.
 Context {Espec : OracleKind}.
 Context {CS: compspecs}.
 
-Lemma sync_change_cont: forall ge k1 k2,
+Lemma sync_change_cont: forall ge k1 k2 k1' k2',
   (forall e te m s3 m3,
-     cl_step ge (State e te k2) m s3 m3 <-> cl_step ge (State e te k1) m s3 m3) ->
+     cl_step ge (State e te k2 ) m s3 m3 <-> cl_step ge (State e te k1 ) m s3 m3) ->
+  (forall e te m s3 m3,
+     cl_step ge (State e te k2') m s3 m3 <-> cl_step ge (State e te k1') m s3 m3) ->
   forall e te e' te' m m',
-  sync ge e e' te te' m m' k1 ->
-  sync ge e e' te te' m m' k2.
+  sync ge (State e te k1) (State e' te' k1') m m' ->
+  sync ge (State e te k2) (State e' te' k2') m m'.
 Proof.
-  introv Equiv Sy. rewrite sync_syncPlus. unfold syncPlus. unfold sync in Sy.
-  introv Star.
+  introv Equiv Equiv' Sy. rewrite sync_syncPlus. unfold syncPlus. unfold sync in Sy.
+  introv CE Star.
   simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
   edestruct Equiv as [Imp _].
   specialize (Imp Step).
+Abort. (*
   specialize (Sy s2 m2 (S n)).
   spec Sy. {
     simpl. exists s11 m11. eauto.
@@ -257,7 +286,9 @@ Proof.
   specialize (Imp' Step').
   simpl. exists s11' m11'. eauto.
 Qed.
+*)
 
+(*
 Lemma sync_step: forall ge e1 e1' te1 te1' m1 m1' k1 e2 e2' te2 te2' m2 m2' k2,
   cl_step ge (State e1  te1  k1) m1  (State e2  te2  k2) m2  ->
   cl_step ge (State e1' te1' k1) m1' (State e2' te2' k2) m2' ->
@@ -268,7 +299,7 @@ Proof.
   intros s3 m3 n Star.
   destruct n as [|n].
   - simpl in Star. inversion Star. subst s3 m3.
-    do 2 eexists. simpl. eapply (conj eq_refl). reflexivity.
+    do 2 eexists. simpl. eapply (conj eq_refl). apply cont_equiv_refl.
   - simpl in Star. destruct Star as [s11 [m11 [Step2 Star]]].
     assert ((s11, m11) = ((State e2 te2 k2), m2)) as E by apply* cl_corestep_fun.
     inversions E. clear Step2.
@@ -277,6 +308,7 @@ Proof.
     exists s3' m3'. refine (conj _ CE).
     simpl. exists (State e2' te2' k2) m2'. eauto.
 Qed.
+*)
 
 Lemma ifc_seq{T: Type}:
   forall Delta h t
@@ -295,11 +327,12 @@ Proof.
     cut (iguard (fun x : T => VST_to_state_pred (P1 x)) N1 A1
            (Kseq h :: Kseq t :: k)). {
       unfold iguard. clear. introv G Sat Sat' SE HE.
+      admit. (* TODO
       apply sync_change_cont with (k1 := (Kseq h :: Kseq t :: k)).
       - clear. intros. split.
         + intro. inversions H. assumption.
         + intro. apply step_seq. assumption.
-      - apply* G.
+      - apply* G. *)
     }
     apply H1i.
     unfold irguard, overridePost, overridePostClsf, lft2, VST_post_to_state_pred. intros.
@@ -325,6 +358,7 @@ Proof.
     simpl in IG.
     unfold iguard in *.
     introv Sat Sat' SE HE.
+    admit. (* TODO
     apply sync_change_cont with (k1 := k).
     + clear. intros. split.
       * intro. inversions H. assumption.
@@ -342,6 +376,7 @@ Proof.
         -- apply andp_right.
            ++ apply prop_right. reflexivity.
            ++ apply derives_refl.
+*)
 Qed.
 
 Lemma ifc_seq_skip{T: Type}:
@@ -384,7 +419,7 @@ Proof.
     specialize (B1i k RG). specialize (B2i k RG).
     unfold iguard in *.
     introv Sat Sat' SE HE.
-    rewrite sync_syncPlus. unfold syncPlus. introv Star. simpl in Star.
+    rewrite sync_syncPlus. unfold syncPlus. introv CE Star. simpl in Star.
     destruct Star as [s11 [m11 [Step Star]]].
     inversion Step. subst m11. subst. rename v1 into bb, H8 into Ev, H9 into Bv, b0 into bbb.
     assert (Bv' : Cop.bool_val bb (typeof b) m1' = Some bbb) by admit. (* TODO by Lo-eq *)
@@ -402,9 +437,10 @@ Proof.
       spec B1i. { apply* stack_lo_equiv_change_cmd. }
       specialize (B1i HE).
       unfold sync in B1i.
+      spec B1i. { simpl. pose proof cont_equiv_refl. auto. }
       specialize (B1i _ _ _ Star).
-      destruct B1i as [s2' [m2' [Star' CE]]].
-      exists s2' m2'. refine (conj _ CE).
+      destruct B1i as [s2' [m2' [Star' CE2]]].
+      exists s2' m2'. refine (conj _ CE2).
       simpl. do 2 eexists. split.
       * apply* step_ifthenelse.
       * simpl. apply Star'.
@@ -416,9 +452,10 @@ Proof.
       spec B2i. { apply* stack_lo_equiv_change_cmd. }
       specialize (B2i HE).
       unfold sync in B2i.
+      spec B2i. { simpl. pose proof cont_equiv_refl. auto. }
       specialize (B2i _ _ _ Star).
-      destruct B2i as [s2' [m2' [Star' CE]]].
-      exists s2' m2'. refine (conj _ CE).
+      destruct B2i as [s2' [m2' [Star' CE2]]].
+      exists s2' m2'. refine (conj _ CE2).
       simpl. do 2 eexists. split.
       * apply* step_ifthenelse.
       * simpl. apply Star'.
@@ -442,7 +479,7 @@ Proof.
     unfold irguard.
     unfold iguard. introv Sat Sat' SE HE.
     rewrite sync_syncPlus. unfold syncPlus.
-    introv Star. simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
+    introv CE Star. simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
     inversion Step. subst s11 m11. subst.
     (* specialize (Incri (* what? *)) *)
 
@@ -486,7 +523,20 @@ Proof.
       extensionality. f_equal. f_equal. apply H'.
     }
     rewrite E in C. clear E. apply C.
-  - 
+  - intros k RG. unfold irguard in RG. unfold iguard in *.
+    introv Sat Sat' SE HE.
+    specialize (RG EK_return retVal x x' ge e1 e1' te1 te1' m1 m1').
+    rewrite sync_syncPlus. unfold syncPlus.
+    introv CE Star. simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
+    inversion Step. subst.
+    rename v' into v, te'' into te11, te' into te0,
+           ve' into e11, k' into k11,
+           H4 into C, H8 into F, H9 into RE, H10 into P.
+    do 2 eexists. simpl. split.
+    + do 2 eexists. split.
+      * eapply step_return.
+        -- 
+    simpl in RG.
 Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
