@@ -2,6 +2,8 @@ Require Import ifc.clight_semantics.
 Require Export ifc.ifc_sig.
 Require Import ifc.simple_vst_store_lemmas.
 Require Import veric.Clight_new.
+Require Import veric.semax_lemmas.
+Require Import sepcomp.closed_safety.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
 Require Import ifc.vst_ifthenelse.
@@ -104,6 +106,16 @@ Definition cont'_equiv (k k' : cont'): Prop := match k, k' with
 Lemma cont'_equiv_refl: forall k, cont'_equiv k k.
 Proof. intro k. unfold cont'_equiv. destruct k; auto. Qed.
 
+Lemma cont'_equiv_sym: forall k k', cont'_equiv k k' -> cont'_equiv k' k.
+Proof. introv CE. unfold cont'_equiv in *. destruct k; destruct k'; intuition. Qed.
+
+Lemma cont'_equiv_trans: forall k1 k2 k3,
+  cont'_equiv k1 k2 -> cont'_equiv k2 k3 -> cont'_equiv k1 k3.
+Proof.
+  introv CE12 CE23. unfold cont'_equiv in *.
+  destruct k1; destruct k2; destruct k3; intuition; congruence.
+Qed.
+
 Fixpoint cont_equiv (k k': cont): Prop := match k, k' with
   | h :: t, h' :: t' => cont'_equiv h h' /\ cont_equiv t t'
   | nil, nil => True
@@ -113,41 +125,94 @@ Fixpoint cont_equiv (k k': cont): Prop := match k, k' with
 Lemma cont_equiv_refl: forall k, cont_equiv k k.
 Proof. intro k. pose proof cont'_equiv_refl. induction k; simpl; auto. Qed.
 
+Lemma cont_equiv_sym: forall k1 k2, cont_equiv k1 k2 -> cont_equiv k2 k1.
+Proof.
+  intro k1. induction k1; introv CE; destruct k2; auto.
+  inversion CE. simpl. apply cont'_equiv_sym in H. auto.
+Qed.
+
+Lemma cont_equiv_trans: forall k1 k2 k3, cont_equiv k1 k2 -> cont_equiv k2 k3 -> cont_equiv k1 k3.
+Proof.
+  intro k1. induction k1; introv CE12 CE23; destruct k2; destruct k3; auto;
+  simpl in *; try contradiction.
+  destruct CE12 as [? CE12]. destruct CE23 as [? CE23]. split.
+  + apply* cont'_equiv_trans.
+  + eapply IHk1; eassumption.
+Qed.
+
 Definition cs_cont_equiv (s s' : corestate): Prop :=
   match s, s' with
   | (State e te k), (State e' te' k') => cont_equiv k k'
-  | _, _ => True end.
+  | ext, ext' => ext = ext'
+    (* if we put True, it's not transitive, and if we put False, it's not reflexive *)
+  end.
 
 Lemma cs_cont_equiv_refl: forall s, cs_cont_equiv s s.
 Proof. pose proof cont_equiv_refl. intro s; destruct s; simpl; auto. Qed.
 
+Lemma cs_cont_equiv_sym: forall s1 s2, cs_cont_equiv s1 s2 -> cs_cont_equiv s2 s1.
+Proof. introv CE. destruct s1; destruct s2; simpl in *; auto. apply* cont_equiv_sym. Qed.
+
+Lemma cs_cont_equiv_trans: forall s1 s2 s3,
+  cs_cont_equiv s1 s2 ->
+  cs_cont_equiv s2 s3 ->
+  cs_cont_equiv s1 s3.
+Proof.
+  introv CE12 CE23.
+  pose proof cont_equiv_trans.
+  destruct s1; destruct s2; destruct s3; simpl in *; eauto; congruence.
+Qed.
+
 Definition starN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
   corestepN cl_core_sem.
 
-Definition sync (ge : genv) (s1 s1': corestate) (m1 m1' : mem): Prop :=
-  cs_cont_equiv s1 s1' /\
-  forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
-    exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
+Lemma starN_fun: forall {ge n s m s1 m1 s2 m2},
+  starN ge n s m s1 m1 ->
+  starN ge n s m s2 m2 ->
+  s1 = s2 /\ m1 = m2.
+Proof.
+  introv Star1 Star2.
+  edestruct corestep_star_fun with (sem := cl_core_sem).
+  + unfold corestep_fun. simpl. introv Step1 Step2.
+    pose proof (cl_corestep_fun _ _ _ _ _ _ _ Step1 Step2) as P.
+    inversion P. auto.
+  + eapply Star1.
+  + eapply Star2.
+  + auto.
+Qed.
 
-(* sync is not symmetric, but we don't need that
-Lemma cs_cont_equiv_sym: forall s s', cs_cont_equiv s s' -> cs_cont_equiv s' s. Admitted.
+Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
+  cs_cont_equiv s1 s1' /\
+  forall n s2 m2 s2' m2',
+    starN ge n s1  m1  s2  m2  ->
+    starN ge n s1' m1' s2' m2' ->
+    cs_cont_equiv s2 s2'.
+
+Lemma sync_refl: forall (ge : genv) (s: corestate) (m: mem),
+  sync ge s m s m.
+Proof.
+  intros. unfold sync. split; [ apply cs_cont_equiv_refl | ].
+  introv Star Star'.
+  destruct (starN_fun Star Star'). subst s2' m2'.
+  apply cs_cont_equiv_refl.
+Qed.
+
 Lemma sync_sym: forall (ge : genv) (s1 s1': corestate) (m1 m1' : mem),
-  sync ge s1 s1' m1 m1' -> sync ge s1' s1 m1' m1.
+  sync ge s1 m1 s1' m1' -> sync ge s1' m1' s1 m1.
 Proof.
   introv [CE Sy]. unfold sync. split.
   + apply cs_cont_equiv_sym. assumption.
-  + intros s2' m2' n Star. specialize (Sy s2 m2 n). eapply Sy.
-Qed.*)
+  + intros n s2' m2' s2 m2 Star' Star. apply cs_cont_equiv_sym. eapply Sy; eassumption.
+Qed.
 
-Lemma cs_cont_equiv_trans: forall s1 s2 s3,
-  cs_cont_equiv s1 s2 -> cs_cont_equiv s2 s3 -> cs_cont_equiv s1 s3. Admitted.
 Lemma sync_trans: forall ge s1 s2 s3 m1 m2 m3,
-  sync ge s1 s2 m1 m2 -> sync ge s2 s3 m2 m3 -> sync ge s1 s3 m1 m3.
+  sync ge s1 m1 s2 m2 -> sync ge s2 m2 s3 m3 -> sync ge s1 m1 s3 m3.
 Proof.
   introv [CE12 Sy12] [CE23 Sy23]. unfold sync. split.
   + apply* cs_cont_equiv_trans.
-  + intros s1F m1F n Star.
-    eapply Sy23. specialize (Sy12 _ _ _ Star). destruct Sy12 as [s2F [m2F [Star2 CE]]].
+  + intros n s1F m1F s3F m3F Star1 Star3.
+    eapply Sy12.
+    (* we don't know where (s2, m2) steps, only have Star1 and Star3! *)
 Abort.
 
 Definition iguard {A : Type}
