@@ -649,19 +649,22 @@ Proof.
   - introv RG. unfold irguard in RG. unfold iguard in *.
     introv Sat Sat' SE HE.
     specialize (RG EK_return retVal x x' ge e1 e1' te1 te1' m1 m1').
+    unfold VST_post_to_state_pred in RG.
+    spec RG. {
+      eapply VST_to_state_pred_commutes_imp; [ | eapply Sat ].
+      apply andp_left2. apply derives_refl.
+    }
+    spec RG. {
+      eapply VST_to_state_pred_commutes_imp; [ | eapply Sat' ].
+      apply andp_left2. apply derives_refl.
+    }
+    specialize (RG SE HE).
     rewrite sync_syncPlus. unfold syncPlus.
-Admitted. (*
-    introv CE Star. simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
-    inversion Step. subst.
-    rename v' into v, te'' into te11, te' into te0,
-           ve' into e11, k' into k11,
-           H4 into C, H8 into F, H9 into RE, H10 into P.
-    do 2 eexists. simpl. split.
-    + do 2 eexists. split.
-      * eapply step_return.
-        -- 
-    simpl in RG.
-*)
+    unfold sync in RG. destruct RG as [CE Sy]. split.
+    + clear - CE. unfold cs_cont_equiv in CE. simpl.
+      (* Problem: if return is not at end of function body,
+         exit_cont chops off a prefix of k/k', so CE is not strong enough *)
+Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
