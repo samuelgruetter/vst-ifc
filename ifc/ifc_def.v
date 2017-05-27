@@ -4,6 +4,8 @@ Require Import ifc.simple_vst_store_lemmas.
 Require Import veric.Clight_new.
 Require Import veric.semax_lemmas.
 Require Import sepcomp.closed_safety.
+Require Import veric.semax.
+Require Import floyd.base.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
 Require Import ifc.vst_ifthenelse.
@@ -181,39 +183,45 @@ Proof.
   + auto.
 Qed.
 
+(*
+Definition can_simulate (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
+  forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
+    exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
+
+Definition sync (ge : genv) (s1: corestate) (m1: mem) (s2: corestate) (m2: mem): Prop :=
+  cs_cont_equiv s1 s2 /\
+  can_simulate ge s1 m1 s2 m2 /\
+  can_simulate ge s2 m2 s1 m1.
+*)
+
 Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
   cs_cont_equiv s1 s1' /\
-  forall n s2 m2 s2' m2',
-    starN ge n s1  m1  s2  m2  ->
-    starN ge n s1' m1' s2' m2' ->
-    cs_cont_equiv s2 s2'.
+  forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
+    exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
 
 Lemma sync_refl: forall (ge : genv) (s: corestate) (m: mem),
   sync ge s m s m.
 Proof.
   intros. unfold sync. split; [ apply cs_cont_equiv_refl | ].
-  introv Star Star'.
-  destruct (starN_fun Star Star'). subst s2' m2'.
-  apply cs_cont_equiv_refl.
+  introv Star. pose proof cs_cont_equiv_refl. eauto.
 Qed.
 
 Lemma sync_sym: forall (ge : genv) (s1 s1': corestate) (m1 m1' : mem),
   sync ge s1 m1 s1' m1' -> sync ge s1' m1' s1 m1.
-Proof.
-  introv [CE Sy]. unfold sync. split.
-  + apply cs_cont_equiv_sym. assumption.
-  + intros n s2' m2' s2 m2 Star' Star. apply cs_cont_equiv_sym. eapply Sy; eassumption.
-Qed.
+Abort. (* Doesn't hold, but we don't need it. *)
 
 Lemma sync_trans: forall ge s1 s2 s3 m1 m2 m3,
   sync ge s1 m1 s2 m2 -> sync ge s2 m2 s3 m3 -> sync ge s1 m1 s3 m3.
 Proof.
   introv [CE12 Sy12] [CE23 Sy23]. unfold sync. split.
   + apply* cs_cont_equiv_trans.
-  + intros n s1F m1F s3F m3F Star1 Star3.
-    eapply Sy12.
-    (* we don't know where (s2, m2) steps, only have Star1 and Star3! *)
-Abort.
+  + intros s1' m1' n Star1.
+    specialize (Sy12 _ _ _ Star1).
+    destruct Sy12 as [s2' [m2' [Star2 CE12']]].
+    specialize (Sy23 _ _ _ Star2).
+    destruct Sy23 as [s3' [m3' [Star3 CE23']]].
+    pose proof cs_cont_equiv_trans. eauto.
+Qed.
 
 Definition iguard {A : Type}
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -226,7 +234,7 @@ Definition iguard {A : Type}
    let s1' := (State e1' te1' k') in
    stack_lo_equiv s1 s1' (preN x) (preN x') ->
    heap_lo_equiv  m1 m1' (preA x) (preA x') ->
-   sync ge s1 s1' m1 m1'.
+   sync ge s1 m1 s1' m1'.
 
 Lemma weaken_iguard{T : Type}: forall Delta (P1 P1': T -> pre_assert) N1 N1' A1 A1' k k',
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
@@ -328,14 +336,14 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
-Definition syncPlus (ge : genv) (s1 s1': corestate) (m1 m1' : mem): Prop :=
+Definition syncPlus ge s1 m1 s1' m1' :=
   cs_cont_equiv s1 s1' /\
   forall s2 m2 n, starN ge (S n) s1 m1 s2 m2 ->
     exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
 
 Lemma sync_syncPlus:
   forall (ge : genv) (s s' : corestate) (m m' : mem),
-  sync ge s s' m m' <-> syncPlus ge s s' m m'.
+  sync ge s m s' m' <-> syncPlus ge s m s' m'.
 Proof.
   unfold syncPlus, sync. split.
   + introv [CE Sy]. apply (conj CE). introv Star. apply* Sy.
@@ -345,40 +353,52 @@ Proof.
     - apply* Sp.
 Qed.
 
-Section RULES.
-Context {Espec : OracleKind}.
-Context {CS: compspecs}.
+Definition cont_step_equiv(k k': cont): Prop :=
+  forall ge e te m s2 m2,
+    cl_step ge (State e te k) m s2 m2 <-> cl_step ge (State e te k') m s2 m2.
 
-Lemma sync_change_cont: forall ge k1 k2 k1' k2',
-  (forall e te m s3 m3,
-     cl_step ge (State e te k2 ) m s3 m3 <-> cl_step ge (State e te k1 ) m s3 m3) ->
-  (forall e te m s3 m3,
-     cl_step ge (State e te k2') m s3 m3 <-> cl_step ge (State e te k1') m s3 m3) ->
-  forall e te e' te' m m',
-  sync ge (State e te k1) (State e' te' k1') m m' ->
-  sync ge (State e te k2) (State e' te' k2') m m'.
+Ltac cont_step_equiv_tac :=
+  unfold cont_step_equiv; (split; let Step := fresh "Step" in introv Step);
+  [ inversion Step; subst; assumption
+  | constructor; assumption ].
+
+Lemma seq_step_equiv: forall s1 s2 k,
+  cont_step_equiv (Kseq (Ssequence s1 s2) :: k) (Kseq s1 :: Kseq s2 :: k).
+Proof. cont_step_equiv_tac. Qed.
+
+Lemma skip_step_equiv: forall k,
+  cont_step_equiv (Kseq Sskip :: k) k.
+Proof. cont_step_equiv_tac. Qed.
+
+Lemma continue_step_equiv: forall k,
+  cont_step_equiv (Kseq Scontinue :: k) (continue_cont k).
+Proof. cont_step_equiv_tac. Qed.
+
+Lemma break_step_equiv: forall k,
+  cont_step_equiv (Kseq Sbreak :: k) (break_cont k).
+Proof. cont_step_equiv_tac. Qed.
+
+Lemma sync_change_cont: forall ge e e' te te' m m' k1 k2 k1' k2',
+  cont_step_equiv k1  k2 ->
+  cont_step_equiv k1' k2' ->
+  (cont_equiv k2 k2' -> cont_equiv k1 k1') ->
+  sync ge (State e te k2) m (State e' te' k2') m' ->
+  sync ge (State e te k1) m (State e' te' k1') m'.
 Proof.
-  introv Equiv Equiv' [CE Sy]. rewrite sync_syncPlus. unfold syncPlus.
-  pose proof (Sy (State e te k2) m 1%nat) as Sy2. simpl in Sy2.
-  spec Sy2. { do 2 eexists. refine (conj _ eq_refl). apply Equiv.
-Abort. (*
-  introv CE Star.
-  simpl in Star. destruct Star as [s11 [m11 [Step Star]]].
-  edestruct Equiv as [Imp _].
-  specialize (Imp Step).
-
+  introv SE SE' CE1 [CE2 Sy]. rewrite sync_syncPlus. unfold syncPlus.
+  simpl. split; [ auto | ].
+  introv Star1. destruct Star1 as [s21 [m21 [Step1 Star1]]].
   specialize (Sy s2 m2 (S n)).
   spec Sy. {
-    simpl. exists s11 m11. eauto.
+    simpl. exists s21 m21. refine (conj _ Star1).
+    unfold cont_step_equiv in SE.
+    edestruct SE. eauto.
   }
   destruct Sy as [s2' [m2' [Star' CE]]].
   simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
   exists s2' m2'. refine (conj _ CE).
-  edestruct Equiv as [_ Imp'].
-  specialize (Imp' Step').
-  simpl. exists s11' m11'. eauto.
+  edestruct SE'. eauto.
 Qed.
-*)
 
 (*
 Lemma sync_step: forall ge e1 e1' te1 te1' m1 m1' k1 e2 e2' te2 te2' m2 m2' k2,
@@ -402,6 +422,10 @@ Proof.
 Qed.
 *)
 
+Section RULES.
+Context {Espec : OracleKind}.
+Context {CS: compspecs}.
+
 Lemma ifc_seq{T: Type}:
   forall Delta h t
     (P1 P2: T -> environ -> mpred) (P3: T -> ret_assert)
@@ -421,12 +445,12 @@ Proof.
            (Kseq h :: Kseq t :: k')
     ). {
       unfold iguard. clear. introv G Sat Sat' SE HE.
-      admit. (* TODO
-      apply sync_change_cont with (k1 := (Kseq h :: Kseq t :: k)).
-      - clear. intros. split.
-        + intro. inversions H. assumption.
-        + intro. apply step_seq. assumption.
-      - apply* G. *)
+      apply sync_change_cont with (k2  := (Kseq h :: Kseq t :: k ))
+                                  (k2' := (Kseq h :: Kseq t :: k')).
+      - apply seq_step_equiv.
+      - apply seq_step_equiv.
+      - simpl. intuition.
+      - apply* G.
     }
     apply H1i.
     unfold irguard, overridePost, overridePostClsf, lft2, VST_post_to_state_pred. intros.
@@ -454,11 +478,10 @@ Proof.
     simpl in IG.
     unfold iguard in *.
     introv Sat Sat' SE HE.
-    admit. (* TODO
-    apply sync_change_cont with (k1 := k).
-    + clear. intros. split.
-      * intro. inversions H. assumption.
-      * intro. apply step_skip. assumption.
+    apply sync_change_cont with (k2 := k) (k2' := k').
+    + apply skip_step_equiv.
+    + apply skip_step_equiv.
+    + simpl. auto.
     + apply* IG.
       * eapply VST_to_state_pred_commutes_imp; [ | eapply Sat ].
         simpl. intro rho. apply andp_right.
@@ -472,7 +495,6 @@ Proof.
         -- apply andp_right.
            ++ apply prop_right. reflexivity.
            ++ apply derives_refl.
-*)
 Qed.
 
 Lemma ifc_seq_skip{T: Type}:
@@ -649,7 +671,7 @@ Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
 Proof.
   introv E Imp H.
   split_ifc_hyps. split.
-  - intro. apply semax_pre with (P' := P1' x); auto.
+  - intro. apply canon.semax_pre with (P' := P1' x); auto.
   - unfold ifc_core, simple_ifc in *.
     introv RG.
     eapply weaken_iguard.
