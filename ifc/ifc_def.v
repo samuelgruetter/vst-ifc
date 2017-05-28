@@ -195,39 +195,58 @@ Definition sync (ge : genv) (s1: corestate) (m1: mem) (s2: corestate) (m2: mem):
 *)
 
 Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
+  cs_cont_equiv s1 s1' ->
   forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
     exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
-
-Lemma sync_to_cs_cont_equiv: forall ge s1 m1 s1' m1',
-  sync ge s1 m1 s1' m1' -> cs_cont_equiv s1 s1'.
-Proof.
-  unfold sync. introv Sy. specialize (Sy s1 m1 O). simpl in Sy.
-  specialize (Sy eq_refl). destruct Sy as [x [y [Eq CE]]]. inversion Eq. subst x y.
-  assumption.
-Qed.
-
-Lemma sync_refl: forall (ge : genv) (s: corestate) (m: mem),
-  sync ge s m s m.
-Proof.
-  intros. unfold sync.
-  introv Star. pose proof cs_cont_equiv_refl. eauto.
-Qed.
-
-Lemma sync_sym: forall (ge : genv) (s1 s1': corestate) (m1 m1' : mem),
-  sync ge s1 m1 s1' m1' -> sync ge s1' m1' s1 m1.
-Abort. (* Doesn't hold, but we don't need it. *)
 
 Lemma sync_trans: forall ge s1 s2 s3 m1 m2 m3,
   sync ge s1 m1 s2 m2 -> sync ge s2 m2 s3 m3 -> sync ge s1 m1 s3 m3.
 Proof.
-  introv Sy12 Sy23. unfold sync.
-  intros s1' m1' n Star1.
+  introv Sy12 Sy23. unfold sync in *.
+  intros CE13 s1' m1' n Star1.
+  edestruct Sy12 as [s2' [m2' [Star2 CE12']]].
+  (* can't get (cs_cont_equiv s1 s2)  *)
+Abort. (*
+  
   specialize (Sy12 _ _ _ Star1).
-  destruct Sy12 as [s2' [m2' [Star2 CE12']]].
   specialize (Sy23 _ _ _ Star2).
   destruct Sy23 as [s3' [m3' [Star3 CE23']]].
   pose proof cs_cont_equiv_trans. eauto.
 Qed.
+*)
+
+Reset sync.
+
+Definition sync (ge : genv) (e1 : env) (te1 : temp_env) (m1 : mem)
+                            (e1': env) (te1': temp_env) (m1': mem): Prop
+:= forall k1 k1', cont_equiv k1 k1' ->
+   forall n e2  te2  k2  m2 , starN ge n (State e1  te1  k1 ) m1  (State e2  te2  k2 ) m2  ->
+     exists e2' te2' k2' m2', starN ge n (State e1' te1' k1') m1' (State e2' te2' k2') m2'
+                           /\ cont_equiv k2 k2'.
+
+(*
+Lemma sync_to_cs_cont_equiv: forall ge s1 m1 s1' m1',
+  sync ge s1 m1 s1' m1' -> cs_cont_equiv s1 s1'.
+Proof.
+Abort. doesn't hold any more
+  unfold sync. introv Sy. specialize (Sy s1 m1 O). simpl in Sy.
+  specialize (Sy eq_refl). destruct Sy as [x [y [Eq CE]]]. inversion Eq. subst x y.
+  assumption.
+Qed.
+*)
+
+Lemma sync_refl: forall (ge : genv) (e1 : env) (te1 : temp_env) (m1 : mem),
+  sync ge e1 te1 m1 e1 te1 m1.
+Proof.
+  intros. unfold sync.
+  introv CE Star. pose proof cont_equiv_refl.
+  (* Have to prove that if we swap k1 by an equivalent k1', execution stays in sync.
+     Doesn't hold when we return from Kcall and restore env/temp_env *)
+Abort.
+
+Lemma sync_sym: forall (ge : genv) (s1 s1': corestate) (m1 m1' : mem),
+  sync ge s1 m1 s1' m1' -> sync ge s1' m1' s1 m1.
+Abort. (* Doesn't hold, but we don't need it. *)
 
 Definition iguard {A : Type}
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
