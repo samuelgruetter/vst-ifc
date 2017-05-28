@@ -96,6 +96,40 @@ Definition same_Noneness{T: Type}(o1 o2: option T): Prop :=
 Axiom Delta_always_typechecks: forall Delta P Q,
   ENTAIL Delta, P |-- Q -> P |-- Q.
 
+Definition starN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
+  corestepN cl_core_sem.
+
+Fixpoint cont_equiv (ge: genv) (m m': mem) (k k' : cont) {struct k}: Prop :=
+match k, k' with
+  | Kseq s         :: t, Kseq s'            :: t' => s = s' /\ cont_equiv ge m m' t t'
+  | Kloop1 s1 s2   :: t, Kloop1 s1' s2'     :: t' => s1 = s1' /\ s2 = s2' /\ cont_equiv ge m m' t t'
+  | Kloop2 s1 s2   :: t, Kloop2 s1' s2'     :: t' => s1 = s1' /\ s2 = s2' /\ cont_equiv ge m m' t t'
+  | Kswitch        :: t, Kswitch            :: t' => cont_equiv ge m m' t t'
+  | Kcall i f e te :: t, Kcall i' f' e' te' :: t' =>
+      i = i' /\ f = f' /\ sync ge e te t m e' te' t' m'
+  | _, _ => False
+  end
+with cs_cont_equiv (ge: genv) (m m': mem) (s s' : corestate) {struct s}: Prop :=
+  match s, s' with
+  | (State e te k), (State e' te' k') => cont_equiv ge m m' k k'
+  | ext, ext' => ext = ext'
+    (* if we put True, it's not transitive, and if we put False, it's not reflexive *)
+  end
+with sync (ge : genv) (e1 : env) (te1 : temp_env) (k1 : cont) (m1 : mem)
+                      (e1': env) (te1': temp_env) (k1': cont) (m1': mem): Prop
+:= forall n e2  te2  k2  m2 , starN ge n (State e1  te1  k1 ) m1  (State e2  te2  k2 ) m2  ->
+     exists e2' te2' k2' m2', starN ge n (State e1' te1' k1') m1' (State e2' te2' k2') m2'
+                           /\ cont_equiv ge m2 m2' k2 k2' (* <-- recursive call with universally
+  quantified k2 is not decreasing! *)
+.
+
+(*
+with sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem) {struct s1}: Prop :=
+  cs_cont_equiv ge m1 m1' s1 s1' ->
+  forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
+    exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_equiv ge m2 m2' s2 s2'.
+*)
+
 Definition cont'_equiv (k k' : cont'): Prop := match k, k' with
   | Kseq s, Kseq s' => s = s'
   | Kloop1 s1 s2, Kloop1 s1' s2' => s1 = s1' /\ s2 = s2'
@@ -164,9 +198,6 @@ Proof.
   pose proof cont_equiv_trans.
   destruct s1; destruct s2; destruct s3; simpl in *; eauto; congruence.
 Qed.
-
-Definition starN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
-  corestepN cl_core_sem.
 
 Lemma starN_fun: forall {ge n s m s1 m1 s2 m2},
   starN ge n s m s1 m1 ->
