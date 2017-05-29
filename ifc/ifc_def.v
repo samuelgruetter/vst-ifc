@@ -99,6 +99,7 @@ Axiom Delta_always_typechecks: forall Delta P Q,
 Definition starN: genv -> nat -> corestate -> mem -> corestate -> mem -> Prop :=
   corestepN cl_core_sem.
 
+(*
 Fixpoint cont_equiv (ge: genv) (m m': mem) (k k' : cont) {struct k}: Prop :=
 match k, k' with
   | Kseq s         :: t, Kseq s'            :: t' => s = s' /\ cont_equiv ge m m' t t'
@@ -122,7 +123,7 @@ with sync (ge : genv) (e1 : env) (te1 : temp_env) (k1 : cont) (m1 : mem)
                            /\ cont_equiv ge m2 m2' k2 k2' (* <-- recursive call with universally
   quantified k2 is not decreasing! *)
 .
-
+*)
 (*
 with sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem) {struct s1}: Prop :=
   cs_cont_equiv ge m1 m1' s1 s1' ->
@@ -152,6 +153,29 @@ Proof.
   destruct k1; destruct k2; destruct k3; intuition; congruence.
 Qed.
 
+Definition cont_head_equiv (k k': cont): Prop := match k, k' with
+  | h :: _, h' :: _ => cont'_equiv h h' (* no requirements on tail *)
+  | nil, nil => True
+  | _, _ => False
+  end.
+
+Lemma cont_head_equiv_refl: forall k, cont_head_equiv k k.
+Proof. intro k. pose proof cont'_equiv_refl. induction k; simpl; auto. Qed.
+
+Lemma cont_head_equiv_sym: forall k1 k2, cont_head_equiv k1 k2 -> cont_head_equiv k2 k1.
+Proof.
+  introv CE. destruct k1; destruct k2; auto.
+  simpl in *. apply cont'_equiv_sym. assumption.
+Qed.
+
+Lemma cont_head_equiv_trans: forall k1 k2 k3,
+  cont_head_equiv k1 k2 -> cont_head_equiv k2 k3 -> cont_head_equiv k1 k3.
+Proof.
+  introv CE12 CE23. destruct k1; destruct k2; destruct k3; simpl in *; auto.
+  + contradiction.
+  + apply* cont'_equiv_trans.
+Qed.
+
 Fixpoint cont_equiv (k k': cont): Prop := match k, k' with
   | h :: t, h' :: t' => cont'_equiv h h' /\ cont_equiv t t'
   | nil, nil => True
@@ -174,6 +198,29 @@ Proof.
   destruct CE12 as [? CE12]. destruct CE23 as [? CE23]. split.
   + apply* cont'_equiv_trans.
   + eapply IHk1; eassumption.
+Qed.
+
+Definition cs_cont_head_equiv (s s' : corestate): Prop :=
+  match s, s' with
+  | (State e te k), (State e' te' k') => cont_head_equiv k k'
+  | ext, ext' => ext = ext'
+    (* if we put True, it's not transitive, and if we put False, it's not reflexive *)
+  end.
+
+Lemma cs_cont_head_equiv_refl: forall s, cs_cont_head_equiv s s.
+Proof. pose proof cont_head_equiv_refl. intro s; destruct s; simpl; auto. Qed.
+
+Lemma cs_cont_head_equiv_sym: forall s1 s2, cs_cont_head_equiv s1 s2 -> cs_cont_head_equiv s2 s1.
+Proof. introv CE. destruct s1; destruct s2; simpl in *; auto. apply* cont_head_equiv_sym. Qed.
+
+Lemma cs_cont_head_equiv_trans: forall s1 s2 s3,
+  cs_cont_head_equiv s1 s2 ->
+  cs_cont_head_equiv s2 s3 ->
+  cs_cont_head_equiv s1 s3.
+Proof.
+  introv CE12 CE23.
+  pose proof cont_head_equiv_trans.
+  destruct s1; destruct s2; destruct s3; simpl in *; eauto; congruence.
 Qed.
 
 Definition cs_cont_equiv (s s' : corestate): Prop :=
@@ -226,26 +273,10 @@ Definition sync (ge : genv) (s1: corestate) (m1: mem) (s2: corestate) (m2: mem):
 *)
 
 Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
-  cs_cont_equiv s1 s1' ->
   forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
-    exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
+    exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
 
-Lemma sync_trans: forall ge s1 s2 s3 m1 m2 m3,
-  sync ge s1 m1 s2 m2 -> sync ge s2 m2 s3 m3 -> sync ge s1 m1 s3 m3.
-Proof.
-  introv Sy12 Sy23. unfold sync in *.
-  intros CE13 s1' m1' n Star1.
-  edestruct Sy12 as [s2' [m2' [Star2 CE12']]].
-  (* can't get (cs_cont_equiv s1 s2)  *)
-Abort. (*
-  
-  specialize (Sy12 _ _ _ Star1).
-  specialize (Sy23 _ _ _ Star2).
-  destruct Sy23 as [s3' [m3' [Star3 CE23']]].
-  pose proof cs_cont_equiv_trans. eauto.
-Qed.
-*)
-
+(*
 Reset sync.
 
 Definition sync (ge : genv) (e1 : env) (te1 : temp_env) (m1 : mem)
@@ -254,30 +285,38 @@ Definition sync (ge : genv) (e1 : env) (te1 : temp_env) (m1 : mem)
    forall n e2  te2  k2  m2 , starN ge n (State e1  te1  k1 ) m1  (State e2  te2  k2 ) m2  ->
      exists e2' te2' k2' m2', starN ge n (State e1' te1' k1') m1' (State e2' te2' k2') m2'
                            /\ cont_equiv k2 k2'.
+*)
 
-(*
-Lemma sync_to_cs_cont_equiv: forall ge s1 m1 s1' m1',
-  sync ge s1 m1 s1' m1' -> cs_cont_equiv s1 s1'.
+Lemma sync_to_cs_cont_head_equiv: forall ge s1 m1 s1' m1',
+  sync ge s1 m1 s1' m1' -> cs_cont_head_equiv s1 s1'.
 Proof.
-Abort. doesn't hold any more
   unfold sync. introv Sy. specialize (Sy s1 m1 O). simpl in Sy.
   specialize (Sy eq_refl). destruct Sy as [x [y [Eq CE]]]. inversion Eq. subst x y.
   assumption.
 Qed.
-*)
 
-Lemma sync_refl: forall (ge : genv) (e1 : env) (te1 : temp_env) (m1 : mem),
-  sync ge e1 te1 m1 e1 te1 m1.
+Lemma sync_refl: forall (ge : genv) (s1: corestate) (m1 : mem),
+  sync ge s1 m1 s1 m1.
 Proof.
   intros. unfold sync.
-  introv CE Star. pose proof cont_equiv_refl.
-  (* Have to prove that if we swap k1 by an equivalent k1', execution stays in sync.
-     Doesn't hold when we return from Kcall and restore env/temp_env *)
-Abort.
+  introv Star. pose proof cs_cont_head_equiv_refl. eauto.
+Qed.
 
 Lemma sync_sym: forall (ge : genv) (s1 s1': corestate) (m1 m1' : mem),
   sync ge s1 m1 s1' m1' -> sync ge s1' m1' s1 m1.
 Abort. (* Doesn't hold, but we don't need it. *)
+
+Lemma sync_trans: forall ge s1 s2 s3 m1 m2 m3,
+  sync ge s1 m1 s2 m2 -> sync ge s2 m2 s3 m3 -> sync ge s1 m1 s3 m3.
+Proof.
+  introv Sy12 Sy23. unfold sync in *.
+  intros s1' m1' n Star1.
+  specialize (Sy12 _ _ _ Star1).
+  destruct Sy12 as [s2' [m2' [Star2 CE12']]].
+  specialize (Sy23 _ _ _ Star2).
+  destruct Sy23 as [s3' [m3' [Star3 CE23']]].
+  pose proof cs_cont_head_equiv_trans. eauto.
+Qed.
 
 Definition iguard {A : Type}
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -393,9 +432,8 @@ Ltac split_ifc_hyps :=
   end.
 
 Definition syncPlus ge s1 m1 s1' m1' :=
-  (*cs_cont_equiv s1 s1' /\*)
   forall s2 m2 n, starN ge (S n) s1 m1 s2 m2 ->
-    exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_equiv s2 s2'.
+    exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
 
 Lemma sync_syncPlus:
   forall (ge : genv) (s s' : corestate) (m m' : mem),
@@ -438,7 +476,7 @@ Proof. cont_step_equiv_tac. Qed.
 Lemma sync_change_cont: forall ge e e' te te' m m' k1 k2 k1' k2',
   cont_step_equiv k1  k2 ->
   cont_step_equiv k1' k2' ->
-  cont_equiv k1 k1' ->
+  cont_head_equiv k1 k1' ->
   sync ge (State e te k2) m (State e' te' k2') m' ->
   sync ge (State e te k1) m (State e' te' k1') m'.
 Proof.
@@ -508,7 +546,7 @@ Proof.
                                   (k2' := (Kseq h :: Kseq t :: k')).
       - apply seq_step_equiv.
       - apply seq_step_equiv.
-      - simpl. intuition. apply sync_to_cs_cont_equiv in G. simpl in G. tauto. 
+      - simpl. reflexivity.
       - exact G.
     }
     apply H1i.
@@ -558,7 +596,7 @@ Proof.
     apply sync_change_cont with (k2 := k) (k2' := k').
     + apply skip_step_equiv.
     + apply skip_step_equiv.
-    + simpl. apply sync_to_cs_cont_equiv in IG. simpl in IG. auto.
+    + reflexivity.
     + exact IG.
 Qed.
 
@@ -604,10 +642,7 @@ Proof.
     introv Sat Sat' SE HE.
     introv Star. destruct n as [|n]; simpl in Star.
     { inversion Star. subst s2 m2. simpl starN. do 2 eexists.
-      apply (conj eq_refl). simpl. apply (conj eq_refl).
-      unfold irguard, iguard in RG.
-      (* Can't use RG because we don't know if execution will arrive there.
-         TODO this no-step case is problematic *) admit. }
+      apply (conj eq_refl). simpl. reflexivity. }
     destruct Star as [s11 [m11 [Step Star]]].
     inversion Step. subst m11. subst. rename v1 into bb, H8 into Ev, H9 into Bv, b0 into bbb.
     assert (Bv' : Cop.bool_val bb (typeof b) m1' = Some bbb) by admit. (* TODO by Lo-eq *)
@@ -725,11 +760,7 @@ Proof.
     specialize (RG SE HE).
     unfold sync. introv Star. destruct n as [|n]; simpl in Star.
     + inversion Star. subst s2 m2. simpl. do 2 eexists. apply (conj eq_refl).
-      apply (conj eq_refl).
-      pose proof (sync_to_cs_cont_equiv _ _ _ _ _ RG) as CE. unfold cs_cont_equiv in CE.
-      (* Problem: if return is not at end of function body,
-         exit_cont chops off a prefix of k/k', so CE is not strong enough *)
-      admit. (* TODO *)
+      reflexivity.
     + destruct Star as [s11 [m11 [Step Star]]].
       inversion Step. subst.
 Admitted.
