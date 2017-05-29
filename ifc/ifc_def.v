@@ -880,6 +880,36 @@ forall Delta ge P Q R N e l A e1 te1 m1 e1' te1' m1' v v' x x' k1 k1',
   v = v'.
 Admitted.
 
+Lemma eval_expr_equiv: forall Delta P Q R v0 e2 ge e1 te1 m1 v,
+  VST_to_state_pred (|> PROPx P (LOCALx Q (SEPx R))) e1 te1 m1 ->
+  ENTAIL Delta, PROPx P (LOCALx Q (SEPx R))
+      |-- local (` (eq v0) (eval_expr e2)) ->
+  Clight.eval_expr ge e1 te1 m1 e2 v ->
+  v0 = v.
+Admitted. (* TODO what about "|>"? *)
+
+Lemma update_state_and_Q: forall P Q R e1 te1 m1 v id,
+  VST_to_state_pred (|> PROPx P (LOCALx Q (SEPx R))) e1 te1 m1 ->
+  VST_to_state_pred
+    (PROPx P (LOCALx (temp id v :: remove_localdef_temp id Q) (SEPx R)))
+    e1 (PTree.set id v te1) m1.
+Admitted. (* TODO does not hold with "|>" in hypothesis but not in conclusion *)
+
+Lemma transport_eval_expr: forall {T: Type}
+  (P : T -> list Prop)
+  (Q : T -> list localdef)
+  (R : T -> list mpred)
+  (N : T -> stack_clsf)
+  (A : T -> heap_clsf)
+  x x' ge e1 te1 k1 m1 e1' te1' k1' m1' E v0,
+  VST_to_state_pred (|> PROPx (P x) (LOCALx (Q x) (SEPx (R x)))) e1 te1 m1 ->
+  VST_to_state_pred (|> PROPx (P x') (LOCALx (Q x') (SEPx (R x')))) e1' te1' m1' ->
+  stack_lo_equiv (State e1 te1 k1) (State e1' te1' k1') (N x) (N x') ->
+  heap_lo_equiv m1 m1' (A x) (A x') ->
+  Clight.eval_expr ge e1 te1 m1 E (v0 x) ->
+  Clight.eval_expr ge e1' te1' m1' E (v0 x').
+Admitted. (* TODO what about "|>"? *)
+
 Lemma ifc_set{T: Type}:
 forall Delta id P Q R (N: T -> stack_clsf) (A: T -> heap_clsf) (e2: expr) l2 t v,
   typeof_temp Delta id = Some t ->
@@ -902,27 +932,49 @@ Proof.
   unfold ifc_def. split.
   - intros x. apply* semax_SC_set.
   - unfold ifc_core. unfold simple_ifc.
-Admitted.
-(*
-    introv Sat Sat' SE HE Star Star'.
-    assert (ek = EK_normal) by admit. assert (ek' = EK_normal) by admit. (* <-- TODO *)
-    subst ek ek'. simpl exit_cont in *.
-    apply invert_set_too_strong in Star.
-    apply invert_set_too_strong in Star'.
-    destruct Star as [? [? [v [? Ev]]]]. subst e0 m2 te2.
-    destruct Star' as [? [? [v' [? Ev']]]]. subst e2' m2' te2'.
-    unfold normalPostClsf. simpl.
-    refine (conj eq_refl (conj _ (conj _ HE))).
-    + admit. (* same_Noneness *)
-    + pose proof SE as SE0. unfold stack_lo_equiv in SE. destruct SE as [E SE]. refine (conj E _).
-      unfold gen_lo_equiv. intros l Lo1 Lo2.
-      do 2 rewrite PTree.gsspec. destruct (peq l id) as [Eq | Ne].
-      * subst l. simpl in Lo1, Lo2. rewrite Pos.eqb_refl in *.
-        f_equal. eapply clsf_expr_sound;
-          [ exact Cl | exact Sat | exact Sat' | .. ]; eassumption.
-      * rewrite <- Pos.eqb_neq in Ne. rewrite Ne in Lo1, Lo2. apply SE; assumption.
+    introv RG. unfold iguard. introv Sat Sat' SE HE.
+    unfold sync. introv Star.
+    destruct n as [|n]; simpl in Star.
+    + inversion Star. subst s2 m2. simpl. do 2 eexists. apply (conj eq_refl). reflexivity.
+    + destruct Star as [s11 [m11 [Step Star]]].
+      inversion Step. subst m11 s11. subst.
+      rename H7 into Ev.
+      assert (v0 x = v) as Eqv. {
+        eapply eval_expr_equiv. eapply Sat. eapply Ev0. apply Ev.
+      }
+      unfold irguard in RG.
+      specialize (RG EK_normal None). unfold iguard in RG.
+      unfold VST_post_to_state_pred, normal_ret_assert, sync, exit_cont in RG.
+      specialize (RG x x' ge e1 e1' (PTree.set id (v0 x) te1) (PTree.set id (v0 x') te1') m1 m1').
+      spec RG. {
+        rewrite VST_to_state_pred_and. split.
+        - rewrite VST_indep_state_pred. reflexivity.
+        - rewrite VST_to_state_pred_and. split.
+          + rewrite VST_indep_state_pred. reflexivity.
+          + apply update_state_and_Q. apply Sat.
+      }
+      spec RG. {
+        rewrite VST_to_state_pred_and. split.
+        - rewrite VST_indep_state_pred. reflexivity.
+        - rewrite VST_to_state_pred_and. split.
+          + rewrite VST_indep_state_pred. reflexivity.
+          + apply update_state_and_Q. apply Sat'.
+      }
+      spec RG. {
+        unfold normalPostClsf. simpl.
+        (* TODO that's the actual IFC part *)
+        admit.
+      }
+      specialize (RG HE).
+      rewrite <- Eqv in Star.
+      specialize (RG _ _ _ Star).
+      destruct RG as [s2' [m2' [Star' CE]]].
+      exists s2' m2'. refine (conj _ CE).
+      simpl. do 2 eexists. refine (conj _ Star').
+      apply step_set.
+      rewrite <- Eqv in Ev.
+      eapply transport_eval_expr. apply Sat. apply Sat'. apply SE. apply HE. apply Ev.
 Qed.
-*)
 
 Lemma ifc_store{T: Type}:
     forall Delta sh n (p: T -> val) P Q R (e1 e2 : expr)
