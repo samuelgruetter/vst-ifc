@@ -775,78 +775,86 @@ Proof.
     rewrite E in C. clear E. apply C.
   - introv RG. unfold irguard in RG. unfold iguard in *.
     introv Sat Sat' SE HE.
-    specialize (RG EK_return retVal x x' ge e1 e1' te1 te1' m1 m1').
-    unfold VST_post_to_state_pred in RG.
-    spec RG. {
-      eapply VST_to_state_pred_commutes_imp; [ | eapply Sat ].
-      apply andp_left2. apply derives_refl.
-    }
-    spec RG. {
-      eapply VST_to_state_pred_commutes_imp; [ | eapply Sat' ].
-      apply andp_left2. apply derives_refl.
-    }
-    specialize (RG SE HE).
+    (* Summary of what we're going to do:
+       From the sync to prove, intro the Star (stepN). If 0 steps were made, trivial.
+       Otherwise, invert the Star to obtain a return Step and another Star from there,
+       and use that other Star to specialize the return guard, to obtain a Star'.
+       Now transport the hypotheses obtained from inverting the Step to the second
+       execution to obtain a Step', and combine Step' and Star' to prove the sync. *)
     unfold sync. introv Star. destruct n as [|n]; simpl in Star.
     + inversion Star. subst s2 m2. simpl. do 2 eexists. apply (conj eq_refl).
       reflexivity.
-
     + destruct Star as [s11 [m11 [Step Star]]].
       inversion Step. subst.
       rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
-      destruct (destruct_call_cont k') as [D | D].
-      * admit. (* probably somehow contradictory *)
-      * destruct D as [? [? [? [? [? Eq]]]]].
-      do 2 eexists. split.
-      { simpl. do 2 eexists. split.
-        { eapply step_return.
-          - eapply Eq.
-          - admit.
-          - admit.
-          - admit.
-        }
-(*      assert (exists ve11' te11' k11' m11',
-        cl_step ge (State e1' te1 (Kseq (Sreturn retExpr) :: k)) m1
-                   (State ve11' te11' k11') m11) as Step'.
-      evar (ve00: env).
-      pose proof (step_return ge f ve00).*)
-      
-
-
-(*
-    + destruct Star as [s11 [m11 [Step Star]]].
-      inversion Step. subst.
-      rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
-      unfold exit_cont in RG. rewrite KEq in RG.
-      destruct retVal; destruct optid. {
-      edestruct RG as [s1'' [m1'' [Star0 CE0]]]. {
-        instantiate (3 := 1%nat). simpl. do 2 eexists. split.
-        - eapply step_return.
-          + simpl. reflexivity.
-          + eassumption.
-          + reflexivity.
-          + simpl. split; [ auto | reflexivity ].
-        - reflexivity.
+      rename ve' into e11, te'' into te11, k'0 into k11, te' into te110.
+      evar (e11': env). evar (te11': temp_env). evar (m11': mem).
+      specialize (RG EK_return retVal x x' ge e11 e11' te11 te11' m11 m11').
+      unfold VST_post_to_state_pred in RG.
+      spec RG. {
+        (* From Sat, which is a statement about e1 te1 m1,
+           conclude that after doing the return, R holds for e11 te11 m11.
+           That's probably proven by VST somewhere... *)
+        admit. (* TODO *)
       }
-      simpl in Star0. destruct Star0 as [s1''' [m1''' [Step0 Eq]]].
-      inversion Eq. subst s1''' m1'''. clear Eq.
-*)
-
-(*
-    + destruct Star as [s11 [m11 [Step Star]]].
-      inversion Step. subst.
-      rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
-      unfold exit_cont in RG. rewrite KEq in RG.
-      edestruct RG as [s1'' [m1'' [Star0 CE0]]]. {
-        instantiate (3 := O). simpl. reflexivity.
+      spec RG. {
+        (* same, but we don't even know e11' te11' m11' yet (evars) *)
+        admit. (* TODO *)
       }
-      simpl in Star0. inversion Star0. subst s1'' m1''. clear Star0.
-      simpl in CE0.
+      spec RG. {
+        admit. (* TODO prove that stack lo equivalence is preserved by return *)
+      }
+      spec RG. {
+        admit. (* TODO prove that heap lo equivalence is preserved by return *)
+      }
+      unfold sync in RG.
+      specialize (RG s2 m2).
       destruct retVal; destruct optid.
-      * (* CE0 gives 0 information, just compares (Sreturn None) to (Sreturn None) *) admit.
-      * (* same *) admit.
-      * (* same *) admit.
-      * (* same *) admit.
-*)
+      * specialize (RG (S n)).
+        spec RG. {
+          simpl. rewrite KEq. do 2 eexists. split.
+          (* That's the case with a return value, more tricky, skip for now *)
+          + admit. (*eapply step_return.*)
+          + admit.
+        }
+        admit.
+      * (* no return optid, but a returned value -> invalid (but how?) *)
+        admit.
+      * (* no return value, but a return optid -> invalid (but how? *)
+        admit.
+      * (* no return value *)
+        specialize (RG (S n)).
+        assert (retExpr = None) by admit. (* TODO follows from typechecking *)
+        subst retExpr.
+        spec RG. {
+          simpl. 
+          do 2 eexists. split.
+          - eapply step_return.
+            + rewrite KEq. simpl. reflexivity.
+            + (* We should have (blocks_of_env ge e11) = (blocks_of_env ge e1),
+                 so freeing the same blocks again should be idempotent. *)
+              instantiate (1 := m11). admit. (* TODO *)
+            + reflexivity.
+            + simpl. split; [ auto | reflexivity ].
+          - destruct TeEq as [_ ?]. subst te110. exact Star.
+        }
+        destruct RG as [s2' [m2' [Star' CE]]].
+        exists s2' m2'. refine (conj _ CE).
+        (* destruct Star' as [s11' [m11'' [Step' Star']]]. *)
+        (* reconstruct 2nd execution *)
+        simpl. do 2 eexists. split.
+        -- eapply step_return.
+           ++ instantiate (3 := e11'). instantiate (3 := f). instantiate (3 := None).
+              (* TODO transport from KEq somehow... *) admit.
+           ++ instantiate (1 := m11').
+              (* TODO transport from MEq somehow... *) admit.
+           ++ reflexivity.
+           ++ simpl. split; [ auto | reflexivity ].
+        -- replace (S n) with n in Star' by admit.
+           (* TODO how can we the number of steps make equal here? *)
+           exact Star'.
+Grab Existential Variables.
+(* TODO once we have filled all the gaps, these should be determined. *)
 Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
