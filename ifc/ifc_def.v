@@ -715,6 +715,34 @@ Admitted. (*
 Admitted.
 *)
 
+Lemma sync_exit_cont_to_head_equiv: forall ge e1 te1 k e1' te1' k' m1 m1' ek retVal,
+  sync ge (State e1  te1  (exit_cont ek retVal k )) m1
+          (State e1' te1' (exit_cont ek retVal k')) m1' ->
+  cont_head_equiv k k'.
+Proof.
+  introv Sy. unfold sync in Sy. destruct ek; simpl in Sy.
+  + (* EK_normal *)
+    apply sync_to_cs_cont_head_equiv in Sy. simpl in Sy. assumption.
+  + (* EK_break *)
+    edestruct Sy as [s1'' [m1'' [Star0 CE]]]. {
+      instantiate (3 := 0%nat). simpl. reflexivity.
+    }
+    simpl in Star0. inversion Star0. subst m1'' s1''. clear Star0.
+    simpl in CE.
+    (* Doesn't hold at all because exit_cont chops off head of k/k' *)
+Abort.
+
+Lemma destruct_call_cont: forall k,
+  call_cont k = nil \/ exists optid f e te k', call_cont k = Kcall optid f e te :: k'.
+Proof.
+  intro k. induction k.
+  - left. reflexivity.
+  - destruct IHk.
+    * destruct a; simpl; auto.
+      right. do 5 eexists. reflexivity.
+    * right. destruct a; simpl; eauto. do 5 eexists. reflexivity.
+Qed.
+
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
         (retExpr: option expr) (retVal: option val),
@@ -761,8 +789,64 @@ Proof.
     unfold sync. introv Star. destruct n as [|n]; simpl in Star.
     + inversion Star. subst s2 m2. simpl. do 2 eexists. apply (conj eq_refl).
       reflexivity.
+
     + destruct Star as [s11 [m11 [Step Star]]].
       inversion Step. subst.
+      rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
+      destruct (destruct_call_cont k') as [D | D].
+      * admit. (* probably somehow contradictory *)
+      * destruct D as [? [? [? [? [? Eq]]]]].
+      do 2 eexists. split.
+      { simpl. do 2 eexists. split.
+        { eapply step_return.
+          - eapply Eq.
+          - admit.
+          - admit.
+          - admit.
+        }
+(*      assert (exists ve11' te11' k11' m11',
+        cl_step ge (State e1' te1 (Kseq (Sreturn retExpr) :: k)) m1
+                   (State ve11' te11' k11') m11) as Step'.
+      evar (ve00: env).
+      pose proof (step_return ge f ve00).*)
+      
+
+
+(*
+    + destruct Star as [s11 [m11 [Step Star]]].
+      inversion Step. subst.
+      rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
+      unfold exit_cont in RG. rewrite KEq in RG.
+      destruct retVal; destruct optid. {
+      edestruct RG as [s1'' [m1'' [Star0 CE0]]]. {
+        instantiate (3 := 1%nat). simpl. do 2 eexists. split.
+        - eapply step_return.
+          + simpl. reflexivity.
+          + eassumption.
+          + reflexivity.
+          + simpl. split; [ auto | reflexivity ].
+        - reflexivity.
+      }
+      simpl in Star0. destruct Star0 as [s1''' [m1''' [Step0 Eq]]].
+      inversion Eq. subst s1''' m1'''. clear Eq.
+*)
+
+(*
+    + destruct Star as [s11 [m11 [Step Star]]].
+      inversion Step. subst.
+      rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
+      unfold exit_cont in RG. rewrite KEq in RG.
+      edestruct RG as [s1'' [m1'' [Star0 CE0]]]. {
+        instantiate (3 := O). simpl. reflexivity.
+      }
+      simpl in Star0. inversion Star0. subst s1'' m1''. clear Star0.
+      simpl in CE0.
+      destruct retVal; destruct optid.
+      * (* CE0 gives 0 information, just compares (Sreturn None) to (Sreturn None) *) admit.
+      * (* same *) admit.
+      * (* same *) admit.
+      * (* same *) admit.
+*)
 Admitted.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
