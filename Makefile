@@ -14,13 +14,16 @@ endif
 
 COMPCERT ?= $(VSTDIR)/compcert
 
-EXTFLAGS = -R $(COMPCERT) compcert
+COMPCERT_FLAG = -R $(COMPCERT) compcert
 
 VSTSUBDIRS=msl sepcomp veric floyd
 
 DIRS = lib ifc examples
 
-COQFLAGS=$(foreach d, $(VSTSUBDIRS), -Q $(VSTDIR)/$(d) $(d)) $(foreach d, $(DIRS), -Q $(d) $(d)) $(EXTFLAGS)
+# Note: make does not interpret the "\n", and this is intended
+COQFLAGS_NL=$(COMPCERT_FLAG)$(foreach d,$(VSTSUBDIRS),\n-Q $(VSTDIR)/$(d) $(d))$(foreach d,$(DIRS),\n-Q $(d) $(d))
+COQFLAGS=$(subst \n, ,$(COQFLAGS_NL))
+
 DEPFLAGS:=$(COQFLAGS)
 
 COQC=$(COQBIN)coqc
@@ -32,8 +35,8 @@ COQDOC=$(COQBIN)coqdoc
 	@echo COQC $*.v
 	@$(COQC) $(COQFLAGS) $*.v 
 
-.loadpath: Makefile
-	echo $(COQFLAGS) > .loadpath
+_CoqProject: Makefile
+	echo -e '$(COQFLAGS_NL)' > _CoqProject
 
 .depend depend:
 	$(COQDEP) >.depend `find $(DIRS) -name "*.v"`
@@ -41,7 +44,7 @@ COQDOC=$(COQBIN)coqdoc
 examples: $(patsubst %.v,%.vo,$(wildcard examples/*.v))
 
 clean:
-	rm -f .loadpath .depend; find $(DIRS) -type f \( -name '*.glob' -o -name '*.vo' -o -name '*.aux' \) -delete
+	rm -f _CoqProject .depend; find $(DIRS) -type f \( -name '*.glob' -o -name '*.vo' -o -name '*.aux' \) -delete
 
 include .depend
 
