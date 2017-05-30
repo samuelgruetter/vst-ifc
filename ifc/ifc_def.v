@@ -832,11 +832,18 @@ Proof.
       * (* no return value, but a return optid -> invalid (but how? *)
         admit.
       * (* no return value *)
-        specialize (RG (S n)).
+        specialize (RG n).
         assert (retExpr = None) by admit. (* TODO follows from typechecking *)
         subst retExpr.
         spec RG. {
-          simpl. 
+          simpl.
+          (* disagreement between (our usage of) exit_cont definition and operational semantics:
+          I'd expect "(exit_cont EK_return None k)" to simplify to
+          "(tail (call_cont k))" but it simplifies to "(Kseq (Sreturn None) :: call_cont k)",
+          which requires another execution step, but the operational semantics don't do such
+          a detour *)
+          admit.
+          (*
           do 2 eexists. split.
           - eapply step_return.
             + rewrite KEq. simpl. reflexivity.
@@ -846,6 +853,7 @@ Proof.
             + reflexivity.
             + simpl. split; [ auto | reflexivity ].
           - destruct TeEq as [_ ?]. subst te110. exact Star.
+          *)
         }
         destruct RG as [s2' [m2' [Star' CE]]].
         exists s2' m2'. refine (conj _ CE).
@@ -859,9 +867,7 @@ Proof.
               (* TODO transport from MEq somehow... *) admit.
            ++ reflexivity.
            ++ simpl. split; [ auto | reflexivity ].
-        -- replace (S n) with n in Star' by admit.
-           (* TODO how can we the number of steps make equal here? *)
-           exact Star'.
+        -- exact Star'.
 Grab Existential Variables.
 (* TODO once we have filled all the gaps, these should be determined. *)
 Admitted.
