@@ -743,6 +743,10 @@ Proof.
     * right. destruct a; simpl; eauto. do 5 eexists. reflexivity.
 Qed.
 
+Lemma and_left_proves_right: forall (P Q: Prop),
+  P -> (P -> Q) -> P /\ Q.
+Proof. intuition. Qed.
+
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
         (retExpr: option expr) (retVal: option val),
@@ -757,7 +761,7 @@ not what we want *)
           (Sreturn retExpr)
           R N A.
 Proof.
-  intros. unfold ifc_def, ifc_core, simple_ifc. split.
+  intros. unfold ifc_def, ifc_core, simple_ifc. apply and_left_proves_right.
   - intro x. 
     pose proof (semax_return Delta (R x) retExpr) as C.
     assert (forall rho, cast_expropt retExpr (ret_type Delta) rho = retVal) as H'. {
@@ -773,7 +777,12 @@ Proof.
       extensionality. f_equal. f_equal. apply H'.
     }
     rewrite E in C. clear E. apply C.
-  - introv RG. unfold irguard in RG. unfold iguard in *.
+  - introv Sound RG.
+    assert (HH: @semax CS Espec = @semax.semax CS Espec) by admit. (* TODO import transparent def *)
+    rewrite HH in Sound. clear HH. rewrite semax_unfold in Sound.
+    (* TODO "Sound" might be useful to prove soundness stuff below, but for the moment,
+       we don't use it *) clear Sound.
+    unfold irguard in RG. unfold iguard in *.
     introv Sat Sat' SE HE.
     (* Summary of what we're going to do:
        From the sync to prove, intro the Star (stepN). If 0 steps were made, trivial.
