@@ -33,6 +33,7 @@ Then run
 
 ### Editing files in CoqIde
 
-    make .loadpath
-    coqide `cat .loadpath` path/to/file/to/edit.v
+    make _CoqProject
+
+and make sure the IDE loads the `_CoqProject` file (it should do so by default).
 
