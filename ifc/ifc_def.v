@@ -435,18 +435,19 @@ Definition syncPlus ge s1 m1 s1' m1' :=
   forall s2 m2 n, starN ge (S n) s1 m1 s2 m2 ->
     exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
 
+(* Note that there's only one c *)
 Lemma sync_syncPlus:
-  forall (ge : genv) (s s' : corestate) (m m' : mem),
-  sync ge s m s' m' <-> syncPlus ge s m s' m'.
+  forall (ge : genv) (e e': env) (te te': temp_env) (c: cont') (k k': cont) (m m' : mem),
+  sync     ge (State e te (c :: k)) m (State e' te' (c :: k')) m' <->
+  syncPlus ge (State e te (c :: k)) m (State e' te' (c :: k')) m'.
 Proof.
   unfold syncPlus, sync. split.
   + introv Sy Star. apply* Sy.
   + introv Sp Star. destruct n as [|n].
     - simpl in Star. inversion Star. subst s2 m2.
-      do 2 eexists. simpl. apply (conj eq_refl).
-Abort. (* syncPlus does need cs_cont_equiv, but that's too strong!
+      do 2 eexists. simpl. apply (conj eq_refl). apply cont'_equiv_refl.
     - apply* Sp.
-Qed.*)
+Qed.
 
 Definition cont_step_equiv(k k': cont): Prop :=
   forall ge e te m s2 m2,
@@ -746,6 +747,54 @@ Qed.
 Lemma and_left_proves_right: forall (P Q: Prop),
   P -> (P -> Q) -> P /\ Q.
 Proof. intuition. Qed.
+
+(* Note: Sbreak is not a step by itself: One cl_step does the break + one more command. *)
+Lemma ifc_break{T: Type}:
+  forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf),
+  ifc_def T Delta
+          (fun (x: T) => R x EK_break None)
+          (fun (x: T) => N x EK_break None)
+          (fun (x: T) => A x EK_break None)
+          Sbreak
+          R N A.
+Proof.
+  intros. unfold ifc_def, ifc_core, simple_ifc. apply and_left_proves_right.
+  - intro x. apply semax_break.
+  - introv Sound RG. unfold irguard, iguard in *.
+    introv Sat Sat' SE HE.
+    specialize (RG EK_break None x x' ge e1 e1' te1 te1' m1 m1').
+    unfold VST_post_to_state_pred in RG. simpl in RG.
+    specialize (RG Sat Sat' SE HE).
+    apply sync_change_cont with (k2 := (break_cont k)) (k2' := (break_cont k')).
+    + apply break_step_equiv.
+    + apply break_step_equiv.
+    + simpl. reflexivity.
+    + exact RG.
+Qed.
+
+(* Note: Scontinue is not a step by itself: One cl_step does the continue + one more command. *)
+Lemma ifc_continue{T: Type}:
+  forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf),
+  ifc_def T Delta
+          (fun (x: T) => R x EK_continue None)
+          (fun (x: T) => N x EK_continue None)
+          (fun (x: T) => A x EK_continue None)
+          Scontinue
+          R N A.
+Proof.
+  intros. unfold ifc_def, ifc_core, simple_ifc. apply and_left_proves_right.
+  - intro x. apply semax_continue.
+  - introv Sound RG. unfold irguard, iguard in *.
+    introv Sat Sat' SE HE.
+    specialize (RG EK_continue None x x' ge e1 e1' te1 te1' m1 m1').
+    unfold VST_post_to_state_pred in RG. simpl in RG.
+    specialize (RG Sat Sat' SE HE).
+    apply sync_change_cont with (k2 := (continue_cont k)) (k2' := (continue_cont k')).
+    + apply continue_step_equiv.
+    + apply continue_step_equiv.
+    + simpl. reflexivity.
+    + exact RG.
+Qed.
 
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)

@@ -208,6 +208,24 @@ Axiom ifc_loop: forall Delta Inv1P Inv1N Inv1A Inv2P Inv2N Inv2A incr body RetP 
     (lft2 loop2_ret_assert Inv1P RetP) (loop1_ret_clsf Inv1N RetN) (loop2_ret_clsf Inv1A RetA) ->
   ifc_def T Delta Inv1P Inv1N Inv1A (Sloop body incr) RetP RetN RetA.
 
+Axiom ifc_break:
+  forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf),
+  ifc_def T Delta
+          (fun (x: T) => R x EK_break None)
+          (fun (x: T) => N x EK_break None)
+          (fun (x: T) => A x EK_break None)
+          Sbreak
+          R N A.
+
+Axiom ifc_continue:
+  forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf),
+  ifc_def T Delta
+          (fun (x: T) => R x EK_continue None)
+          (fun (x: T) => N x EK_continue None)
+          (fun (x: T) => A x EK_continue None)
+          Scontinue
+          R N A.
+
 Axiom ifc_return:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
         (retExpr: option expr) (retVal: option val),
