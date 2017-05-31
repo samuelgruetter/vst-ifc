@@ -474,6 +474,67 @@ Lemma break_step_equiv: forall k,
   cont_step_equiv (Kseq Sbreak :: k) (break_cont k).
 Proof. cont_step_equiv_tac. Qed.
 
+Definition relate_retVal_and_retExpr ge e1 te1 m1 f retVal retExpr :=
+        match retExpr with
+        | Some a =>
+            exists v' v,
+            retVal = Some v' /\
+            Clight.eval_expr ge e1 te1 m1 a v /\
+            Cop.sem_cast v (typeof a) (fn_return f) m1 = Some v'
+        | None => retVal = None
+        end.
+
+Lemma return_step_equiv: forall ge f retVal retExpr e te k m s2 m2,
+  current_function k = Some f ->
+  relate_retVal_and_retExpr ge e te m f retVal retExpr ->
+  cl_step ge (State e te (exit_cont EK_return retVal k)) m s2 m2 ->
+  cl_step ge (State e te (Kseq (Sreturn retExpr) :: k)) m s2 m2.
+Proof.
+    unfold cont_step_equiv. introv Cf R Step.
+    simpl in Step.
+    destruct retVal.
+    + simpl in Step.
+      destruct (call_cont k) eqn: E.
+      * inv Step. simpl in H3. discriminate.
+      * destruct c.
+        { exfalso; clear - E.
+          revert c0 E; induction k; try destruct a; simpl; intros; try discriminate; eauto. }
+        { exfalso; clear - E.
+          revert c0 E; induction k; try destruct a; simpl; intros; try discriminate; eauto. }
+        { exfalso; clear - E.
+          revert c0 E; induction k; try destruct a; simpl; intros; try discriminate; eauto. }
+        { exfalso; clear - E.
+          revert c0 E; induction k; try destruct a; simpl; intros; try discriminate; eauto. }
+        { destruct l.
+          - inversion Step. subst. simpl in H3. inversion H3. subst.
+            eapply step_return; try eassumption; simpl; try eassumption.
+            unfold relate_retVal_and_retExpr in R.
+            assert (current_function k = Some f0) as Cf0. {
+              eapply semax_call.call_cont_current_function. eassumption.
+            }
+            rewrite Cf0 in Cf. inv Cf.
+            destruct retExpr.
+            + destruct R as [v' [v0 [Eq R]]]. inversion Eq. eexists. eapply R.
+            + inversion R.
+          - inversion Step. subst. simpl in H3. inversion H3. subst.
+            eapply step_return; try eassumption; simpl; try eassumption.
+            unfold relate_retVal_and_retExpr in R.
+            assert (current_function k = Some f1) as Cf1. {
+              eapply semax_call.call_cont_current_function. eassumption.
+            }
+            rewrite Cf1 in Cf. inv Cf.
+            destruct retExpr.
+            + destruct R as [v' [v0 [Eq R]]]. inversion Eq. eexists. eapply R.
+            + inversion R.
+        }
+    + destruct retExpr as [retExpr|].
+      - unfold relate_retVal_and_retExpr in R.
+        destruct R as [? [? [? R]]]. discriminate.
+      - inversion Step. subst.
+        rewrite veric.semax_call.call_cont_idem in H3.
+        eapply step_return; eauto.
+Qed.
+
 Lemma sync_change_cont: forall ge e e' te te' m m' k1 k2 k1' k2',
   cont_step_equiv k1  k2 ->
   cont_step_equiv k1' k2' ->
@@ -489,12 +550,12 @@ Proof.
     spec Sy. {
       simpl. exists s21 m21. refine (conj _ Star1).
       unfold cont_step_equiv in SE.
-      edestruct SE. eauto.
+      edestruct SE as [? _]. eauto.
     }
     destruct Sy as [s2' [m2' [Star' CE]]].
     simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
     exists s2' m2'. refine (conj _ CE).
-    simpl. edestruct SE'. eauto.
+    simpl. edestruct SE' as [_ ?]. eauto.
 Qed.
 
 (*
@@ -796,6 +857,11 @@ Proof.
     + exact RG.
 Qed.
 
+(* If we look at step_call_internal, we see that it adds another return at the end of
+   the function body.
+   Does that mean that every function returns twice? No
+*)
+
 Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
         (retExpr: option expr) (retVal: option val),
@@ -839,13 +905,96 @@ Proof.
        and use that other Star to specialize the return guard, to obtain a Star'.
        Now transport the hypotheses obtained from inverting the Step to the second
        execution to obtain a Step', and combine Step' and Star' to prove the sync. *)
-    unfold sync. introv Star. destruct n as [|n]; simpl in Star.
-    + inversion Star. subst s2 m2. simpl. do 2 eexists. apply (conj eq_refl).
-      reflexivity.
-    + destruct Star as [s11 [m11 [Step Star]]].
-      inversion Step. subst.
-      rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
-      rename ve' into e11, te'' into te11, k'0 into k11, te' into te110.
+    rewrite sync_syncPlus. unfold syncPlus.
+    introv Star. simpl in Star.
+    destruct Star as [s11 [m11 [Step Star]]].
+    inversion Step. subst.
+    rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
+    rename ve' into e11, te'' into te11, k'0 into k11, te' into te110.
+    evar (e11': env). evar (te11': temp_env). evar (m11': mem).
+    specialize (RG EK_return retVal x x' ge e1 e1' te1 te1' m1 m1').
+    unfold VST_post_to_state_pred in RG.
+    spec RG. {
+      eapply VST_to_state_pred_commutes_imp; [ | eapply Sat ].
+      apply andp_left2. apply derives_refl.
+    }
+    spec RG. {
+      eapply VST_to_state_pred_commutes_imp; [ | eapply Sat' ].
+      apply andp_left2. apply derives_refl.
+    }
+    specialize (RG SE HE).
+    unfold sync in RG.
+    specialize (RG s2 m2).
+      destruct retVal; destruct optid.
+      * specialize (RG (S n)).
+        spec RG. {
+          simpl.
+          (* That's the case with a return value, more tricky, skip for now *)
+          admit.
+        }
+        admit.
+      * (* no return optid, but a returned value -> invalid (but how?) *)
+        admit.
+      * (* no return value, but a return optid -> invalid (but how? *)
+        admit.
+      * (* no return value *)
+        specialize (RG (S n)).
+        assert (retExpr = None) by admit. (* TODO follows from typechecking *)
+        subst retExpr.
+        spec RG. {
+          simpl. rewrite KEq.
+          (* disagreement between (our usage of) exit_cont definition and operational semantics:
+          I'd expect "(exit_cont EK_return None k)" to simplify to
+          "(tail (call_cont k))" but it simplifies to "(Kseq (Sreturn None) :: call_cont k)",
+          which requires another execution step, but the operational semantics don't do such
+          a detour *)
+          do 2 eexists. split.
+          - eapply step_return.
+            + simpl. reflexivity.
+            + (* We should have (blocks_of_env ge e11) = (blocks_of_env ge e1),
+                 so freeing the same blocks again should be idempotent. *)
+              instantiate (1 := m11). admit. (* TODO *)
+            + reflexivity.
+            + simpl. split; [ auto | reflexivity ].
+          - destruct TeEq as [_ ?]. subst te110. exact Star.
+        }
+        destruct RG as [s2' [m2' [Star' CE]]].
+        exists s2' m2'. refine (conj _ CE).
+        destruct Star' as [s11' [m11'' [Step' Star']]].
+        (* reconstruct 2nd execution *)
+        simpl. do 2 eexists. split.
+        -- eapply step_return.
+           ++ instantiate (3 := e11'). instantiate (3 := f). instantiate (3 := None).
+              (* TODO transport from KEq somehow... *) admit.
+           ++ instantiate (1 := m11').
+              (* TODO transport from MEq somehow... *) admit.
+           ++ reflexivity.
+           ++ simpl. split; [ auto | reflexivity ].
+        -- (* exact Star'. *) admit.
+Grab Existential Variables.
+(* TODO once we have filled all the gaps, these should be determined. *)
+Admitted.
+
+(*
+  - introv Sound RG.
+    assert (HH: @semax CS Espec = @semax.semax CS Espec) by admit. (* TODO import transparent def *)
+    rewrite HH in Sound. clear HH. rewrite semax_unfold in Sound.
+    (* TODO "Sound" might be useful to prove soundness stuff below, but for the moment,
+       we don't use it *) clear Sound.
+    unfold irguard in RG. unfold iguard in *.
+    introv Sat Sat' SE HE.
+    (* Summary of what we're going to do:
+       From the sync to prove, intro the Star (stepN). If 0 steps were made, trivial.
+       Otherwise, invert the Star to obtain a return Step and another Star from there,
+       and use that other Star to specialize the return guard, to obtain a Star'.
+       Now transport the hypotheses obtained from inverting the Step to the second
+       execution to obtain a Step', and combine Step' and Star' to prove the sync. *)
+    rewrite sync_syncPlus. unfold syncPlus.
+    introv Star. simpl in Star.
+    destruct Star as [s11 [m11 [Step Star]]].
+    inversion Step. subst.
+    rename H4 into KEq, H8 into MEq, H9 into RetEq, H10 into TeEq.
+    rename ve' into e11, te'' into te11, k'0 into k11, te' into te110.
       evar (e11': env). evar (te11': temp_env). evar (m11': mem).
       specialize (RG EK_return retVal x x' ge e11 e11' te11 te11' m11 m11').
       unfold VST_post_to_state_pred in RG.
@@ -885,7 +1034,7 @@ Proof.
         assert (retExpr = None) by admit. (* TODO follows from typechecking *)
         subst retExpr.
         spec RG. {
-          simpl.
+          simpl. rewrite KEq.
           (* disagreement between (our usage of) exit_cont definition and operational semantics:
           I'd expect "(exit_cont EK_return None k)" to simplify to
           "(tail (call_cont k))" but it simplifies to "(Kseq (Sreturn None) :: call_cont k)",
@@ -920,6 +1069,7 @@ Proof.
 Grab Existential Variables.
 (* TODO once we have filled all the gaps, these should be determined. *)
 Admitted.
+*)
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
