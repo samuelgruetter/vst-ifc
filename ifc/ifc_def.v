@@ -487,11 +487,11 @@ Definition relate_retVal_and_retExpr ge e1 te1 m1 f retVal retExpr :=
 Lemma return_step_equiv: forall ge f retVal retExpr e te k m s2 m2,
   current_function k = Some f ->
   relate_retVal_and_retExpr ge e te m f retVal retExpr ->
-  cl_step ge (State e te (exit_cont EK_return retVal k)) m s2 m2 ->
+  cl_step ge (State e te (exit_cont EK_return retVal k)) m s2 m2 <->
   cl_step ge (State e te (Kseq (Sreturn retExpr) :: k)) m s2 m2.
 Proof.
-    unfold cont_step_equiv. introv Cf R Step.
-    simpl in Step.
+  introv Cf R. split; introv Step.
+  - simpl in Step.
     destruct retVal.
     + simpl in Step.
       destruct (call_cont k) eqn: E.
@@ -528,11 +528,31 @@ Proof.
             + inversion R.
         }
     + destruct retExpr as [retExpr|].
-      - unfold relate_retVal_and_retExpr in R.
+      * unfold relate_retVal_and_retExpr in R.
         destruct R as [? [? [? R]]]. discriminate.
-      - inversion Step. subst.
+      * inversion Step. subst.
         rewrite veric.semax_call.call_cont_idem in H3.
         eapply step_return; eauto.
+  - inversion Step. subst. rename H3 into KEq, H7 into MEq, H8 into REq, H9 into PEq.
+    simpl.
+    unfold relate_retVal_and_retExpr in R. destruct retExpr.
+    + destruct R as [v'' [v [E [Ev Cast]]]].
+      subst retVal. rewrite KEq.
+      destruct REq as [v''' [Ev' Cast']].
+      assert (v''' = v). { eapply eval_expr_fun; eassumption. }
+      subst v'''. clear Ev'.
+      assert (current_function k = Some f0) as Eqf. {
+        eapply semax_call.call_cont_current_function. eassumption.
+      }
+      rewrite Cf in Eqf. inversion Eqf. subst f0. clear Eqf.
+      rewrite Cast in Cast'. inv Cast'.
+      destruct optid; apply* step_return.
+    + subst retVal.
+      eapply step_return.
+      { rewrite semax_call.call_cont_idem. eassumption. }
+      { assumption. }
+      { reflexivity. }
+      { subst v'. assumption. }
 Qed.
 
 Lemma sync_change_cont: forall ge e e' te te' m m' k1 k2 k1' k2',
@@ -912,7 +932,7 @@ Proof.
     specialize (RG SE HE).
     unfold sync in RG.
     specialize (RG s2 m2 n).
-    spec RG. { Fail apply Star. (* TODO need the other direction as well *) }
+    spec RG. { Fail apply Star. admit. (* TODO need the other direction as well *) }
     destruct RG as [s2' [m2' [Star' CE]]].
     exists s2' m2'. refine (conj _ CE).
     destruct n as [|n].
