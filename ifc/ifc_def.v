@@ -555,6 +555,15 @@ Proof.
       { subst v'. assumption. }
 Qed.
 
+(* hypotheses too strong, can't use *)
+Lemma return_step_equiv': forall f retVal retExpr k,
+  current_function k = Some f ->
+  (forall ge e te m, relate_retVal_and_retExpr ge e te m f retVal retExpr) ->
+  cont_step_equiv (Kseq (Sreturn retExpr) :: k) (exit_cont EK_return retVal k).
+Proof.
+  unfold cont_step_equiv. intros. symmetry. apply* return_step_equiv.
+Qed.
+
 Lemma sync_change_cont: forall ge e e' te te' m m' k1 k2 k1' k2',
   cont_step_equiv k1  k2 ->
   cont_step_equiv k1' k2' ->
@@ -918,7 +927,7 @@ Proof.
     (* TODO "Sound" might be useful to prove soundness stuff below, but for the moment,
        we don't use it *) clear Sound.
     unfold irguard in RG. unfold iguard in *.
-    introv Sat Sat' SE HE. unfold sync. introv Star.
+    introv Sat Sat' SE HE.
     specialize (RG EK_return retVal x x' ge e1 e1' te1 te1' m1 m1').
     unfold VST_post_to_state_pred in RG.
     spec RG. {
@@ -930,21 +939,39 @@ Proof.
       apply andp_left2. apply derives_refl.
     }
     specialize (RG SE HE).
-    unfold sync in RG.
+    unfold sync. introv Star.
     specialize (RG s2 m2 n).
-    spec RG. { Fail apply Star. admit. (* TODO need the other direction as well *) }
-    destruct RG as [s2' [m2' [Star' CE]]].
-    exists s2' m2'. refine (conj _ CE).
-    destruct n as [|n].
-    + inversion Star. subst s2 m2. inversion Star'. subst s2' m2'. simpl.
-      simpl in CE. (* destruct retVal; destruct (call_cont k'); try inversion CE. *) admit.
-    + simpl. cbn - [exit_cont] in Star'.
+    destruct n as [|n]; simpl in Star.
+    + inversion Star. subst s2 m2. simpl.
+      do 2 eexists. apply (conj eq_refl). reflexivity.
+    + destruct Star as [s11 [m11 [Step Star]]].
+      inversion Step. subst. rename H4 into KEq, H8 into MEq, H9 into REq, H10 into PEq.
+      spec RG. {
+        cbn - [exit_cont]. do 2 eexists. refine (conj _ Star).
+          edestruct (return_step_equiv ge f retVal retExpr e1 te1 k m1) as [_ Equiv].
+          * eapply semax_call.call_cont_current_function. rewrite KEq. reflexivity.
+          * unfold relate_retVal_and_retExpr. destruct retExpr.
+            - destruct REq as [v [Ev Cast]].
+              do 2 eexists. refine (conj _ (conj Ev Cast)).
+              (* TODO follows from H, Ev, Cast *)
+              admit.
+            - simpl in H. unfold_lift in H.
+              assert (dummyEnv: environ) by repeat constructor.
+              change None with ((fun _ : environ => (@None val)) dummyEnv).
+              rewrite H. reflexivity.
+          * eapply Equiv. exact Step.
+        }
+      destruct RG as [s2' [m2' [Star' CE]]].
+      cbn - [exit_cont] in Star'.
       destruct Star' as [s11' [m11' [Step' Star']]].
-      exists s11' m11'.
-      refine (conj _ Star').
-      eapply return_step_equiv; [ | | eapply Step' ].
-      (* TODO invert Star to Step and Star, and transport from first execution to second *)
-      admit. admit.
+      do 2 eexists.
+      cbn - [exit_cont]. refine (conj _ CE).
+      do 2 eexists. refine (conj _ Star').
+      edestruct (return_step_equiv ge f retVal retExpr e1' te1' k' m1') as [Equiv _].
+      * eapply semax_call.call_cont_current_function. admit.
+        (* TODO how can we transport stuff from k to k'?? *)
+      * (* TODO again *) admit.
+      * eapply Equiv. apply Step'.
 Grab Existential Variables.
 (* TODO once we have filled all the gaps, these should be determined. *)
 Admitted.
