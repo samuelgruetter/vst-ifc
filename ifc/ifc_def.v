@@ -272,9 +272,15 @@ Definition sync (ge : genv) (s1: corestate) (m1: mem) (s2: corestate) (m2: mem):
   can_simulate ge s2 m2 s1 m1.
 *)
 
+(*
 Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
   forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
     exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
+*)
+
+Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
+  forall s2 m2 n, starN ge n s1  m1  s2  m2  ->
+  forall s2' m2', starN ge n s1' m1' s2' m2' -> cs_cont_head_equiv s2 s2'.
 
 (*
 Reset sync.
@@ -291,32 +297,30 @@ Lemma sync_to_cs_cont_head_equiv: forall ge s1 m1 s1' m1',
   sync ge s1 m1 s1' m1' -> cs_cont_head_equiv s1 s1'.
 Proof.
   unfold sync. introv Sy. specialize (Sy s1 m1 O). simpl in Sy.
-  specialize (Sy eq_refl). destruct Sy as [x [y [Eq CE]]]. inversion Eq. subst x y.
-  assumption.
+  apply (Sy eq_refl _ _ eq_refl).
 Qed.
 
 Lemma sync_refl: forall (ge : genv) (s1: corestate) (m1 : mem),
   sync ge s1 m1 s1 m1.
 Proof.
   intros. unfold sync.
-  introv Star. pose proof cs_cont_head_equiv_refl. eauto.
+  introv Star Star'. destruct (starN_fun Star Star'). subst. apply cs_cont_head_equiv_refl.
 Qed.
 
 Lemma sync_sym: forall (ge : genv) (s1 s1': corestate) (m1 m1' : mem),
   sync ge s1 m1 s1' m1' -> sync ge s1' m1' s1 m1.
-Abort. (* Doesn't hold, but we don't need it. *)
+Proof.
+  unfold sync.
+  introv Sy Star Star'. apply cs_cont_head_equiv_sym. apply* Sy.
+Qed.
 
 Lemma sync_trans: forall ge s1 s2 s3 m1 m2 m3,
   sync ge s1 m1 s2 m2 -> sync ge s2 m2 s3 m3 -> sync ge s1 m1 s3 m3.
 Proof.
   introv Sy12 Sy23. unfold sync in *.
-  intros s1' m1' n Star1.
-  specialize (Sy12 _ _ _ Star1).
-  destruct Sy12 as [s2' [m2' [Star2 CE12']]].
-  specialize (Sy23 _ _ _ Star2).
-  destruct Sy23 as [s3' [m3' [Star3 CE23']]].
-  pose proof cs_cont_head_equiv_trans. eauto.
-Qed.
+  intros s1' m1' n Star1 s3' m3' Star3.
+  (* We don't know whether (s2,m2) steps *)
+Abort. (* Doesn't hold, but we don't need it. *)
 
 Definition iguard {A : Type}
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -431,6 +435,7 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
+(*
 Definition syncPlus ge s1 m1 s1' m1' :=
   forall s2 m2 n, starN ge (S n) s1 m1 s2 m2 ->
     exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
@@ -448,6 +453,7 @@ Proof.
       do 2 eexists. simpl. apply (conj eq_refl). apply cont'_equiv_refl.
     - apply* Sp.
 Qed.
+*)
 
 Definition cont_step_equiv(k k': cont): Prop :=
   forall ge e te m s2 m2,
@@ -564,50 +570,52 @@ Proof.
   unfold cont_step_equiv. intros. symmetry. apply* return_step_equiv.
 Qed.
 
-Lemma sync_change_cont: forall ge e e' te te' m m' k1 k2 k1' k2',
-  cont_step_equiv k1  k2 ->
-  cont_step_equiv k1' k2' ->
+Lemma return_step_equiv_tc: forall {CS : compspecs}
+  Delta retExpr (retVal: option val) ge e1 te1 k m1 s3 m3,
+  cast_expropt retExpr (ret_type Delta) = ` retVal ->
+  cl_step ge (State e1 te1 (Kseq (Sreturn retExpr) :: k)) m1 s3 m3 ->
+  cl_step ge (State e1 te1 (exit_cont EK_return retVal k)) m1 s3 m3.
+Proof.
+  introv Tc Step. inversion Step. subst.
+  rename H3 into KEq, H7 into MEq, H8 into REq, H9 into PEq.
+  eapply return_step_equiv with (retExpr := retExpr).
+  * eapply semax_call.call_cont_current_function. eapply KEq.
+  * unfold relate_retVal_and_retExpr.
+    remember (construct_rho (filter_genv ge) e1 te1) as rho.
+    destruct retExpr.
+    - destruct REq as [v [Ev Cast]].
+      do 2 eexists. refine (conj _ (conj Ev Cast)).
+      simpl in Tc. unfold_lift in Tc.
+      change retVal with ((fun _ : environ => retVal) rho).
+      rewrite <- Tc. rewrite <- Cast.
+      (* TODO should follow from Ev, and maybe some additional 
+         typechecking conditions to be added *)
+      admit.
+    - simpl in Tc. unfold_lift in Tc.
+      assert (dummyEnv: environ) by repeat constructor.
+      change None with ((fun _ : environ => (@None val)) dummyEnv).
+      rewrite Tc. reflexivity.
+  * exact Step.
+Qed.
+
+Lemma convergent_steps_sync: forall ge e e' te te' m m' k1 k2 k1' k2',
   cont_head_equiv k1 k1' ->
+  (forall s3 m3, cl_step ge (State e  te  k1 ) m  s3 m3 ->
+                 cl_step ge (State e  te  k2 ) m  s3 m3) ->
+  (forall s3 m3, cl_step ge (State e' te' k1') m' s3 m3 ->
+                 cl_step ge (State e' te' k2') m' s3 m3) ->
   sync ge (State e te k2) m (State e' te' k2') m' ->
   sync ge (State e te k1) m (State e' te' k1') m'.
 Proof.
-  introv SE SE' CE1 Sy. unfold sync in *. introv Star. destruct n as [|n]; simpl in Star.
-  - inversion Star. subst s2 m2. do 2 eexists. simpl starN. apply (conj eq_refl).
-    simpl. apply CE1.
-  - destruct Star as [s21 [m21 [Step1 Star1]]].
-    specialize (Sy s2 m2 (S n)).
-    spec Sy. {
-      simpl. exists s21 m21. refine (conj _ Star1).
-      unfold cont_step_equiv in SE.
-      edestruct SE as [? _]. eauto.
-    }
-    destruct Sy as [s2' [m2' [Star' CE]]].
-    simpl in Star'. destruct Star' as [s11' [m11' [Step' Star']]].
-    exists s2' m2'. refine (conj _ CE).
-    simpl. edestruct SE' as [_ ?]. eauto.
+  introv CE Imp Imp' Sy1. unfold sync in *.
+  introv Star Star'. destruct n as [|n]; simpl in *.
+  - inversion Star; inversion Star'. subst. apply CE.
+  - destruct Star  as [s3  [m3  [Step  Star ]]].
+    destruct Star' as [s3' [m3' [Step' Star']]].
+    eapply Sy1 with (n := (S n)).
+    + simpl. do 2 eexists. refine (conj _ Star). eapply Imp. exact Step.
+    + simpl. do 2 eexists. refine (conj _ Star'). eapply Imp'. exact Step'.
 Qed.
-
-(*
-Lemma sync_step: forall ge e1 e1' te1 te1' m1 m1' k1 e2 e2' te2 te2' m2 m2' k2,
-  cl_step ge (State e1  te1  k1) m1  (State e2  te2  k2) m2  ->
-  cl_step ge (State e1' te1' k1) m1' (State e2' te2' k2) m2' ->
-  sync ge e2 e2' te2 te2' m2 m2' k2 ->
-  sync ge e1 e1' te1 te1' m1 m1' k1.
-Proof.
-  introv Step Step' Sy. unfold sync in *.
-  intros s3 m3 n Star.
-  destruct n as [|n].
-  - simpl in Star. inversion Star. subst s3 m3.
-    do 2 eexists. simpl. eapply (conj eq_refl). apply cont_equiv_refl.
-  - simpl in Star. destruct Star as [s11 [m11 [Step2 Star]]].
-    assert ((s11, m11) = ((State e2 te2 k2), m2)) as E by apply* cl_corestep_fun.
-    inversions E. clear Step2.
-    specialize (Sy _ _ _ Star).
-    destruct Sy as [s3' [m3' [Star' CE]]].
-    exists s3' m3'. refine (conj _ CE).
-    simpl. exists (State e2' te2' k2) m2'. eauto.
-Qed.
-*)
 
 Section RULES.
 Context {Espec : OracleKind}.
@@ -633,11 +641,11 @@ Proof.
     ). {
       unfold iguard. clear. introv G Sat Sat' SE HE.
       specialize (G _ _ ge _ _ _ _ _ _ Sat Sat' SE HE).
-      apply sync_change_cont with (k2  := (Kseq h :: Kseq t :: k ))
-                                  (k2' := (Kseq h :: Kseq t :: k')).
-      - apply seq_step_equiv.
-      - apply seq_step_equiv.
+      apply convergent_steps_sync with (k2  := (Kseq h :: Kseq t :: k ))
+                                       (k2' := (Kseq h :: Kseq t :: k')).
       - simpl. reflexivity.
+      - apply seq_step_equiv.
+      - apply seq_step_equiv.
       - exact G.
     }
     apply H1i.
@@ -684,10 +692,10 @@ Proof.
         + apply derives_refl.
     }
     specialize (IG SE HE).
-    apply sync_change_cont with (k2 := k) (k2' := k').
-    + apply skip_step_equiv.
-    + apply skip_step_equiv.
+    apply convergent_steps_sync with (k2 := k) (k2' := k').
     + reflexivity.
+    + apply skip_step_equiv.
+    + apply skip_step_equiv.
     + exact IG.
 Qed.
 
@@ -731,13 +739,15 @@ Proof.
     specialize (B1i k k' RG). specialize (B2i k k' RG).
     unfold iguard in *.
     introv Sat Sat' SE HE.
-    introv Star. destruct n as [|n]; simpl in Star.
-    { inversion Star. subst s2 m2. simpl starN. do 2 eexists.
-      apply (conj eq_refl). simpl. reflexivity. }
+    introv Star Star'. destruct n as [|n]; simpl in Star, Star'.
+    { inversion Star. subst s2 m2.
+      inversion Star'. subst s2' m2'.
+      simpl. reflexivity. }
     destruct Star as [s11 [m11 [Step Star]]].
+    destruct Star' as [s11' [m11' [Step' Star']]].
     inversion Step. subst m11. subst. rename v1 into bb, H8 into Ev, H9 into Bv, b0 into bbb.
-    assert (Bv' : Cop.bool_val bb (typeof b) m1' = Some bbb) by admit. (* TODO by Lo-eq *)
-    assert (Ev' : Clight.eval_expr ge e1' te1' m1' b bb) by admit. (* TODO by Lo-eq *)
+    inversion Step'. subst m11'. subst. rename v1 into bb', H8 into Ev', H9 into Bv', b0 into bbb'.
+    assert (bbb' = bbb) by admit. (* TODO by Lo-eq *) subst bbb'.
     specialize (B1i x x' ge e1 e1' te1 te1' m1 m1').
     specialize (B2i x x' ge e1 e1' te1 te1' m1 m1').
     unfold lft0, lft2 in *. repeat rewrite VST_to_state_pred_and in *.
@@ -751,12 +761,7 @@ Proof.
       spec B1i. { apply* stack_lo_equiv_change_cmd. }
       specialize (B1i HE).
       unfold sync in B1i.
-      specialize (B1i _ _ _ Star).
-      destruct B1i as [s2' [m2' [Star' CE2]]].
-      exists s2' m2'. refine (conj _ CE2).
-      simpl. do 2 eexists. split.
-      * apply* step_ifthenelse.
-      * simpl. apply Star'.
+      apply (B1i _ _ _ Star _ _ Star').
     + (* else-branch *)
       clear B1s B1i.
       unfold lft0, lft2 in *. repeat rewrite VST_to_state_pred_and in *.
@@ -765,12 +770,7 @@ Proof.
       spec B2i. { apply* stack_lo_equiv_change_cmd. }
       specialize (B2i HE).
       unfold sync in B2i.
-      specialize (B2i _ _ _ Star).
-      destruct B2i as [s2' [m2' [Star' CE2]]].
-      exists s2' m2'. refine (conj _ CE2).
-      simpl. do 2 eexists. split.
-      * apply* step_ifthenelse.
-      * simpl. apply Star'.
+      apply (B2i _ _ _ Star _ _ Star').
 Grab Existential Variables. apply nil. apply nil. apply nil. apply nil.
 Qed.
 
@@ -806,23 +806,6 @@ Admitted. (*
 Admitted.
 *)
 
-Lemma sync_exit_cont_to_head_equiv: forall ge e1 te1 k e1' te1' k' m1 m1' ek retVal,
-  sync ge (State e1  te1  (exit_cont ek retVal k )) m1
-          (State e1' te1' (exit_cont ek retVal k')) m1' ->
-  cont_head_equiv k k'.
-Proof.
-  introv Sy. unfold sync in Sy. destruct ek; simpl in Sy.
-  + (* EK_normal *)
-    apply sync_to_cs_cont_head_equiv in Sy. simpl in Sy. assumption.
-  + (* EK_break *)
-    edestruct Sy as [s1'' [m1'' [Star0 CE]]]. {
-      instantiate (3 := 0%nat). simpl. reflexivity.
-    }
-    simpl in Star0. inversion Star0. subst m1'' s1''. clear Star0.
-    simpl in CE.
-    (* Doesn't hold at all because exit_cont chops off head of k/k' *)
-Abort.
-
 Lemma destruct_call_cont: forall k,
   call_cont k = nil \/ exists optid f e te k', call_cont k = Kcall optid f e te :: k'.
 Proof.
@@ -855,10 +838,10 @@ Proof.
     specialize (RG EK_break None x x' ge e1 e1' te1 te1' m1 m1').
     unfold VST_post_to_state_pred in RG. simpl in RG.
     specialize (RG Sat Sat' SE HE).
-    apply sync_change_cont with (k2 := (break_cont k)) (k2' := (break_cont k')).
-    + apply break_step_equiv.
-    + apply break_step_equiv.
+    apply convergent_steps_sync with (k2 := (break_cont k)) (k2' := (break_cont k')).
     + simpl. reflexivity.
+    + apply break_step_equiv.
+    + apply break_step_equiv.
     + exact RG.
 Qed.
 
@@ -879,10 +862,10 @@ Proof.
     specialize (RG EK_continue None x x' ge e1 e1' te1 te1' m1 m1').
     unfold VST_post_to_state_pred in RG. simpl in RG.
     specialize (RG Sat Sat' SE HE).
-    apply sync_change_cont with (k2 := (continue_cont k)) (k2' := (continue_cont k')).
-    + apply continue_step_equiv.
-    + apply continue_step_equiv.
+    apply convergent_steps_sync with (k2 := (continue_cont k)) (k2' := (continue_cont k')).
     + simpl. reflexivity.
+    + apply continue_step_equiv.
+    + apply continue_step_equiv.
     + exact RG.
 Qed.
 
@@ -905,7 +888,7 @@ not what we want *)
           (Sreturn retExpr)
           R N A.
 Proof.
-  intros. unfold ifc_def, ifc_core, simple_ifc. apply and_left_proves_right.
+  intros. unfold ifc_def, ifc_core, simple_ifc. split.
   - intro x. 
     pose proof (semax_return Delta (R x) retExpr) as C.
     assert (forall rho, cast_expropt retExpr (ret_type Delta) rho = retVal) as H'. {
@@ -921,11 +904,7 @@ Proof.
       extensionality. f_equal. f_equal. apply H'.
     }
     rewrite E in C. clear E. apply C.
-  - introv Sound RG.
-    assert (HH: @semax CS Espec = @semax.semax CS Espec) by admit. (* TODO import transparent def *)
-    rewrite HH in Sound. clear HH. rewrite semax_unfold in Sound.
-    (* TODO "Sound" might be useful to prove soundness stuff below, but for the moment,
-       we don't use it *) clear Sound.
+  - introv RG.
     unfold irguard in RG. unfold iguard in *.
     introv Sat Sat' SE HE.
     specialize (RG EK_return retVal x x' ge e1 e1' te1 te1' m1 m1').
@@ -939,42 +918,17 @@ Proof.
       apply andp_left2. apply derives_refl.
     }
     specialize (RG SE HE).
-    unfold sync. introv Star.
-    specialize (RG s2 m2 n).
-    destruct n as [|n]; simpl in Star.
-    + inversion Star. subst s2 m2. simpl.
-      do 2 eexists. apply (conj eq_refl). reflexivity.
-    + destruct Star as [s11 [m11 [Step Star]]].
-      inversion Step. subst. rename H4 into KEq, H8 into MEq, H9 into REq, H10 into PEq.
-      spec RG. {
-        cbn - [exit_cont]. do 2 eexists. refine (conj _ Star).
-          edestruct (return_step_equiv ge f retVal retExpr e1 te1 k m1) as [_ Equiv].
-          * eapply semax_call.call_cont_current_function. rewrite KEq. reflexivity.
-          * unfold relate_retVal_and_retExpr. destruct retExpr.
-            - destruct REq as [v [Ev Cast]].
-              do 2 eexists. refine (conj _ (conj Ev Cast)).
-              (* TODO follows from H, Ev, Cast *)
-              admit.
-            - simpl in H. unfold_lift in H.
-              assert (dummyEnv: environ) by repeat constructor.
-              change None with ((fun _ : environ => (@None val)) dummyEnv).
-              rewrite H. reflexivity.
-          * eapply Equiv. exact Step.
-        }
-      destruct RG as [s2' [m2' [Star' CE]]].
-      cbn - [exit_cont] in Star'.
-      destruct Star' as [s11' [m11' [Step' Star']]].
-      do 2 eexists.
-      cbn - [exit_cont]. refine (conj _ CE).
-      do 2 eexists. refine (conj _ Star').
-      edestruct (return_step_equiv ge f retVal retExpr e1' te1' k' m1') as [Equiv _].
-      * eapply semax_call.call_cont_current_function. admit.
-        (* TODO how can we transport stuff from k to k'?? *)
-      * (* TODO again *) admit.
-      * eapply Equiv. apply Step'.
-Grab Existential Variables.
-(* TODO once we have filled all the gaps, these should be determined. *)
-Admitted.
+    apply convergent_steps_sync with (k2  := (exit_cont EK_return retVal k ))
+                                     (k2' := (exit_cont EK_return retVal k')).
+    + simpl. reflexivity.
+    + introv Step. eapply return_step_equiv_tc.
+      * eapply H.
+      * eapply Step.
+    + introv Step'. eapply return_step_equiv_tc.
+      * eapply H.
+      * eapply Step'.
+    + exact RG.
+Qed.
 
 Lemma ifc_pre{T: Type}: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
   (forall x, ENTAIL Delta, P1 x |-- P1' x) ->
@@ -1060,15 +1014,15 @@ Proof.
   - intros x. apply* semax_SC_set.
   - unfold ifc_core. unfold simple_ifc.
     introv RG. unfold iguard. introv Sat Sat' SE HE.
-    unfold sync. introv Star.
-    destruct n as [|n]; simpl in Star.
-    + inversion Star. subst s2 m2. simpl. do 2 eexists. apply (conj eq_refl). reflexivity.
+    unfold sync. introv Star Star'.
+    destruct n as [|n]; simpl in Star, Star'.
+    + inversion Star. subst s2 m2. inversion Star'. subst s2' m2'. reflexivity.
     + destruct Star as [s11 [m11 [Step Star]]].
       inversion Step. subst m11 s11. subst.
       rename H7 into Ev.
-      assert (v0 x = v) as Eqv. {
-        eapply eval_expr_equiv. eapply Sat. eapply Ev0. apply Ev.
-      }
+      destruct Star' as [s11' [m11' [Step' Star']]].
+      inversion Step'. subst m11' s11'. subst.
+      rename H7 into Ev'. rename v1 into v'.
       unfold irguard in RG.
       specialize (RG EK_normal None). unfold iguard in RG.
       unfold VST_post_to_state_pred, normal_ret_assert, sync, exit_cont in RG.
@@ -1093,14 +1047,15 @@ Proof.
         admit.
       }
       specialize (RG HE).
+      assert (v0 x = v) as Eqv. {
+        eapply eval_expr_equiv. eapply Sat. eapply Ev0. apply Ev.
+      }
+      assert (v0 x' = v') as Eqv'. {
+        eapply eval_expr_equiv. eapply Sat'. eapply Ev0. apply Ev'.
+      }
       rewrite <- Eqv in Star.
-      specialize (RG _ _ _ Star).
-      destruct RG as [s2' [m2' [Star' CE]]].
-      exists s2' m2'. refine (conj _ CE).
-      simpl. do 2 eexists. refine (conj _ Star').
-      apply step_set.
-      rewrite <- Eqv in Ev.
-      eapply transport_eval_expr. apply Sat. apply Sat'. apply SE. apply HE. apply Ev.
+      rewrite <- Eqv' in Star'.
+      apply (RG _ _ _ Star _ _ Star').
 Qed.
 
 Lemma ifc_store{T: Type}:
