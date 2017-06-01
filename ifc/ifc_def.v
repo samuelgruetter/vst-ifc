@@ -272,9 +272,15 @@ Definition sync (ge : genv) (s1: corestate) (m1: mem) (s2: corestate) (m2: mem):
   can_simulate ge s2 m2 s1 m1.
 *)
 
+(*
 Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
   forall s2 m2 n, starN ge n s1 m1 s2 m2 ->
     exists s2' m2', starN ge n s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
+*)
+
+Definition sync (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
+  forall s2 m2 n, starN ge n s1  m1  s2  m2  ->
+  forall s2' m2', starN ge n s1' m1' s2' m2' -> cs_cont_head_equiv s2 s2'.
 
 (*
 Reset sync.
@@ -291,32 +297,30 @@ Lemma sync_to_cs_cont_head_equiv: forall ge s1 m1 s1' m1',
   sync ge s1 m1 s1' m1' -> cs_cont_head_equiv s1 s1'.
 Proof.
   unfold sync. introv Sy. specialize (Sy s1 m1 O). simpl in Sy.
-  specialize (Sy eq_refl). destruct Sy as [x [y [Eq CE]]]. inversion Eq. subst x y.
-  assumption.
+  apply (Sy eq_refl _ _ eq_refl).
 Qed.
 
 Lemma sync_refl: forall (ge : genv) (s1: corestate) (m1 : mem),
   sync ge s1 m1 s1 m1.
 Proof.
   intros. unfold sync.
-  introv Star. pose proof cs_cont_head_equiv_refl. eauto.
+  introv Star Star'. destruct (starN_fun Star Star'). subst. apply cs_cont_head_equiv_refl.
 Qed.
 
 Lemma sync_sym: forall (ge : genv) (s1 s1': corestate) (m1 m1' : mem),
   sync ge s1 m1 s1' m1' -> sync ge s1' m1' s1 m1.
-Abort. (* Doesn't hold, but we don't need it. *)
+Proof.
+  unfold sync.
+  introv Sy Star Star'. apply cs_cont_head_equiv_sym. apply* Sy.
+Qed.
 
 Lemma sync_trans: forall ge s1 s2 s3 m1 m2 m3,
   sync ge s1 m1 s2 m2 -> sync ge s2 m2 s3 m3 -> sync ge s1 m1 s3 m3.
 Proof.
   introv Sy12 Sy23. unfold sync in *.
-  intros s1' m1' n Star1.
-  specialize (Sy12 _ _ _ Star1).
-  destruct Sy12 as [s2' [m2' [Star2 CE12']]].
-  specialize (Sy23 _ _ _ Star2).
-  destruct Sy23 as [s3' [m3' [Star3 CE23']]].
-  pose proof cs_cont_head_equiv_trans. eauto.
-Qed.
+  intros s1' m1' n Star1 s3' m3' Star3.
+  (* We don't know whether (s2,m2) steps *)
+Abort. (* Doesn't hold, but we don't need it. *)
 
 Definition iguard {A : Type}
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
@@ -431,6 +435,7 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
+(*
 Definition syncPlus ge s1 m1 s1' m1' :=
   forall s2 m2 n, starN ge (S n) s1 m1 s2 m2 ->
     exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
@@ -448,6 +453,7 @@ Proof.
       do 2 eexists. simpl. apply (conj eq_refl). apply cont'_equiv_refl.
     - apply* Sp.
 Qed.
+*)
 
 Definition cont_step_equiv(k k': cont): Prop :=
   forall ge e te m s2 m2,
@@ -534,6 +540,26 @@ Proof.
         rewrite veric.semax_call.call_cont_idem in H3.
         eapply step_return; eauto.
 Qed.
+
+Lemma convergent_steps_sync: forall ge e e' te te' m m' k1 k2 k1' k2',
+  cont_head_equiv k2 k2' ->
+  (forall s3 m3, cl_step ge (State e  te  k1 ) m  s3 m3 ->
+                 cl_step ge (State e  te  k2 ) m  s3 m3) ->
+  (forall s3 m3, cl_step ge (State e' te' k1') m' s3 m3 ->
+                 cl_step ge (State e' te' k2') m' s3 m3) ->
+  sync ge (State e te k1) m (State e' te' k1') m' ->
+  sync ge (State e te k2) m (State e' te' k2') m'.
+Proof.
+  introv CE Imp Imp' Sy1. unfold sync in *.
+  introv Star Star'. destruct n as [|n]; simpl in *.
+  - inversion Star; inversion Star'. subst. apply CE.
+  - destruct Star  as [s3  [m3  [Step  Star ]]].
+    destruct Star' as [s3' [m3' [Step' Star']]].
+    eapply Sy1 with (n := n).
+    (* "The wrong way round" because difference to convergent_controls_safe:
+        safeN_ has the step in a positive position, but sync has it in a negative position
+        (to the left of the implication). *)
+Abort.
 
 Lemma sync_change_cont: forall ge e e' te te' m m' k1 k2 k1' k2',
   cont_step_equiv k1  k2 ->
@@ -702,9 +728,10 @@ Proof.
     specialize (B1i k k' RG). specialize (B2i k k' RG).
     unfold iguard in *.
     introv Sat Sat' SE HE.
-    introv Star. destruct n as [|n]; simpl in Star.
-    { inversion Star. subst s2 m2. simpl starN. do 2 eexists.
-      apply (conj eq_refl). simpl. reflexivity. }
+    introv Star Star'. destruct n as [|n]; simpl in Star, Star'.
+    { inversion Star. subst s2 m2.
+      inversion Star'. subst s2' m2'.
+      simpl. reflexivity. }
     destruct Star as [s11 [m11 [Step Star]]].
     inversion Step. subst m11. subst. rename v1 into bb, H8 into Ev, H9 into Bv, b0 into bbb.
     assert (Bv' : Cop.bool_val bb (typeof b) m1' = Some bbb) by admit. (* TODO by Lo-eq *)
@@ -898,7 +925,7 @@ Proof.
     (* TODO "Sound" might be useful to prove soundness stuff below, but for the moment,
        we don't use it *) clear Sound.
     unfold irguard in RG. unfold iguard in *.
-    introv Sat Sat' SE HE. unfold sync. introv Star.
+    introv Sat Sat' SE HE. unfold sync. introv Star Star'.
     specialize (RG EK_return retVal x x' ge e1 e1' te1 te1' m1 m1').
     unfold VST_post_to_state_pred in RG.
     spec RG. {
@@ -913,6 +940,14 @@ Proof.
     unfold sync in RG.
     specialize (RG s2 m2 n).
     spec RG. { Fail apply Star. (* TODO need the other direction as well *) }
+    specialize (RG s2' m2').
+    spec RG. { Fail apply Star'. (* TODO need the other direction as well *) }
+    exact RG.
+    (* So in fact, with the double-forall definition, we *only* need the other direction,
+       and we don't need the direction that VST needs.
+       This is because in VST's safeN_ has the step in a positive position, 
+       but our sync has it in a negative position (to the left of the implication). *)
+    (*
     destruct RG as [s2' [m2' [Star' CE]]].
     exists s2' m2'. refine (conj _ CE).
     destruct n as [|n].
@@ -925,6 +960,7 @@ Proof.
       eapply return_step_equiv; [ | | eapply Step' ].
       (* TODO invert Star to Step and Star, and transport from first execution to second *)
       admit. admit.
+      *)
 Grab Existential Variables.
 (* TODO once we have filled all the gaps, these should be determined. *)
 Admitted.
