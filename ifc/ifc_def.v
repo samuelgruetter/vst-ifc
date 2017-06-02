@@ -11,6 +11,8 @@ Require Import floyd.field_at.
 Require Import ifc.vst_ifthenelse.
 Require Import floyd.client_lemmas.
 Require Import floyd.sc_set_load_store.
+Require Import floyd.nested_field_lemmas.
+Require Import floyd.proj_reptype_lemmas.
 Require Import List. Import ListNotations.
 
 Local Open Scope logic.
@@ -454,10 +456,9 @@ Ltac split_ifc_hyps :=
       destruct H as [Hs Hi]
   end.
 
-(*
-Definition syncPlus ge s1 m1 s1' m1' :=
-  forall s2 m2 n, starN ge (S n) s1 m1 s2 m2 ->
-    exists s2' m2', starN ge (S n) s1' m1' s2' m2' /\ cs_cont_head_equiv s2 s2'.
+Definition syncPlus (ge : genv) (s1: corestate) (m1: mem) (s1': corestate) (m1': mem): Prop :=
+  forall s2 m2 n, starN ge (S n) s1  m1  s2  m2  ->
+  forall s2' m2', starN ge (S n) s1' m1' s2' m2' -> cs_cont_head_equiv s2 s2'.
 
 (* Note that there's only one c *)
 Lemma sync_syncPlus:
@@ -467,12 +468,11 @@ Lemma sync_syncPlus:
 Proof.
   unfold syncPlus, sync. split.
   + introv Sy Star. apply* Sy.
-  + introv Sp Star. destruct n as [|n].
-    - simpl in Star. inversion Star. subst s2 m2.
-      do 2 eexists. simpl. apply (conj eq_refl). apply cont'_equiv_refl.
+  + introv Sp Star Star'. destruct n as [|n].
+    - simpl in Star. inversion Star. subst s2 m2. inversion Star'. subst s2' m2'.
+      simpl. apply cont'_equiv_refl.
     - apply* Sp.
 Qed.
-*)
 
 Definition cont_step_equiv(k k': cont): Prop :=
   forall ge e te m s2 m2,
@@ -1095,6 +1095,150 @@ Proof.
       rewrite <- Eqv in Star.
       rewrite <- Eqv' in Star'.
       apply (RG _ _ _ Star _ _ Star').
+Qed.
+
+(* TODO remove "|>" *)
+Axiom specialize_entail: forall {T: Type} x (P: T -> list Prop) Q R e1 te1 m1 D Delta,
+  VST_to_state_pred (|> PROPx (P x) (LOCALx (Q x) (SEPx (R x)))) e1 te1 m1 ->
+  ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |-- !! (D x) ->
+  D x.
+
+Lemma ifc_load{T: Type}: forall Delta P Q R (N: T -> stack_clsf) (A: T -> heap_clsf) sh n id e
+  (t t_root: type) (gfs0 gfs1 gfs: T -> list gfield) (l1 l2: T -> label)
+  (p q: T -> val) (v : T -> val)
+  (* dependent types FTW: *)
+  (v' : forall (x: T), reptype (nested_field_type t_root (gfs0 x))),
+  (* VST preconditions: *)
+  typeof_temp Delta id = Some t ->
+  is_neutral_cast (typeof e) t = true ->
+  type_is_volatile (typeof e) = false ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     local (`(eq (q x)) (eval_lvalue e))) ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+     !! ((q x) = field_address t_root (gfs x) (p x))) ->
+  (forall x, typeof e = nested_field_type t_root (gfs x)) ->
+  (forall x, (gfs x) = (gfs1 x) ++ (gfs0 x)) ->
+  (forall x, nth_error (R x) n = Some (field_at sh t_root (gfs0 x) (v' x) (p x))) ->
+  readable_share sh ->
+  (forall x, JMeq (proj_reptype (nested_field_type t_root (gfs0 x)) (gfs1 x) (v' x)) (v x)) ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+    (tc_lvalue Delta e) &&
+    local `(tc_val (typeof e) (v x))) ->
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+    (!! legal_nested_field t_root (gfs x))) ->
+  (* IFC preconditions: *)
+  (forall x, ENTAIL Delta, PROPx (P x) (LOCALx (Q x) (SEPx (R x))) |--
+                 !! (clsf_lvalue (N x) e = Some (l1 x) /\
+                    (forall bl ofs, (q x) = Vptr bl ofs -> A x (bl, ofs) = (l2 x)))) ->
+  ifc_def T Delta
+    (fun x => (|>PROPx (P x) (LOCALx (Q x) (SEPx (R x)))))
+    N
+    A
+    (Sset id e)
+    (fun x => (normal_ret_assert (PROPx (P x) 
+                                 (LOCALx (temp id (v x) :: remove_localdef_temp id (Q x))
+                                 (SEPx (R x))))))
+    (normalPostClsf (fun x id0 =>
+           if Pos.eqb id0 id then lub (l1 x) (l2 x) else N x id0))
+    (normalPostClsf A).
+Proof.
+  introv TEq NCast Volatile Ev Nice TEq2 GfsEq Nth.
+  introv Rsh JM Tc Lnf Ifc.
+  unfold ifc_def. split.
+  - intros x. apply* semax_SC_field_load'.
+  - unfold ifc_core. unfold simple_ifc.
+    unfold irguard, iguard.
+    introv RG. introv Sat Sat' SE HE.
+    rewrite sync_syncPlus. unfold syncPlus. introv Star Star'.
+    simpl in Star, Star'.
+    destruct Star  as [s11  [m11  [Step  Star ]]].
+    destruct Star' as [s11' [m11' [Step' Star']]].
+    inversion Step . subst s11  m11 . subst.
+    inversion Step'. subst s11' m11'. subst.
+    rename v0 into vv, v1 into vv'.
+    specialize (RG EK_normal None x x' ge e1 e1').
+    unfold VST_post_to_state_pred, normal_ret_assert in RG. cbn -[andp] in RG.
+    specialize (RG (PTree.set id (v x) te1) (PTree.set id (v x') te1') m1 m1').
+    spec RG. {
+      rewrite VST_to_state_pred_and. split.
+      - replace (fun _ : environ => !! (EK_normal = EK_normal))
+          with ((!! (EK_normal = EK_normal)): environ -> mpred)
+          by reflexivity.
+        rewrite VST_indep_state_pred. reflexivity.
+      - rewrite VST_to_state_pred_and. split.
+        + replace (fun _ : environ => !! (None = None))
+            with ((!! ((@None val) = None)): environ -> mpred)
+            by reflexivity.
+          rewrite VST_indep_state_pred. reflexivity.
+        + apply update_state_and_Q. apply Sat.
+    }
+    spec RG. {
+      rewrite VST_to_state_pred_and. split.
+      - replace (fun _ : environ => !! (EK_normal = EK_normal))
+          with ((!! (EK_normal = EK_normal)): environ -> mpred)
+          by reflexivity.
+        rewrite VST_indep_state_pred. reflexivity.
+      - rewrite VST_to_state_pred_and. split.
+        + replace (fun _ : environ => !! (None = None))
+            with ((!! ((@None val) = None)): environ -> mpred)
+            by reflexivity.
+          rewrite VST_indep_state_pred. reflexivity.
+        + apply update_state_and_Q. apply Sat'.
+    }
+    spec RG. {
+      remember (fun x => (clsf_lvalue (N x) e = Some (l1 x) /\
+              (forall (bl : block) (ofs : int),
+               q x = Vptr bl ofs -> A x (bl, ofs) = l2 x))) as F.
+      assert (F x) as Cl. {
+        eapply specialize_entail with (Delta := Delta); [ exact Sat | ].
+        subst F. apply Ifc.
+      }
+      assert (F x') as Cl'. {
+        eapply specialize_entail with (Delta := Delta); [ exact Sat' | ].
+        subst F. apply Ifc.
+      }
+      subst F.
+      destruct Cl as [Cl1 Cl2]. destruct Cl' as [Cl1' Cl2'].
+      (* TODO these follow from typechecking somehow *)
+      assert (exists bl  ofs , q x  = Vptr bl  ofs ) as EE  by admit.
+      assert (exists bl' ofs', q x' = Vptr bl' ofs') as EE' by admit.
+      destruct EE  as [bl  [ofs  Eqqx ]].
+      destruct EE' as [bl' [ofs' Eqqx']].
+      specialize (Cl2  _ _ Eqqx ).
+      specialize (Cl2' _ _ Eqqx').
+      unfold stack_lo_equiv in *. destruct SE as [? SE]. split; [ assumption | ].
+      unfold gen_lo_equiv in *. introv E E'.
+      destruct ((l =? id)%positive) eqn: Eqid.
+      - rewrite Pos.eqb_eq in Eqid. subst l. do 2 rewrite PTree.gss.
+        f_equal.
+        destruct (l1 x); [ | discriminate ].
+        destruct (l1 x'); [ | discriminate ].
+        rewrite E in Cl2. rewrite E' in Cl2'.
+        (* TODO because of Cl1 and Cl1', e is classified as Lo both in x and x', and therefore
+           we obtain the same value in Ev for x and x', so: *)
+        assert (q x = q x') as Exx' by admit.
+        rewrite <- Exx' in Eqqx'. rewrite Eqqx in Eqqx'. symmetry in Eqqx'. inv Eqqx'.
+        unfold heap_lo_equiv, gen_lo_equiv in HE.
+        specialize (HE _ Cl2 Cl2').
+        (* TODO we need to be much more VST-compatible to establish this,
+           not even the types match: *)
+        assert (val_to_memval: val -> memval) by admit.
+        assert (heap_access m1  (bl, ofs) = val_to_memval (v  x)) as Eh  by admit.
+        assert (heap_access m1' (bl, ofs) = val_to_memval (v x')) as Eh' by admit.
+        rewrite Eh in HE. rewrite Eh' in HE.
+        assert (val_to_memval_inj: forall v1 v2,
+          val_to_memval v1 = val_to_memval v2 -> v1 = v2) by admit.
+        apply val_to_memval_inj. apply HE.
+      - rewrite Pos.eqb_neq in Eqid. do 2 rewrite PTree.gso by (apply Eqid).
+        apply (SE _ E E').
+    }
+    specialize (RG HE).
+    unfold sync in RG.
+    (* TODO follows from H7/H8, Ev, Nice, Nth, JM *)
+    assert (vv = (v x)) as Evx by admit.
+    assert (vv' = (v x')) as Evx' by admit.
+    rewrite Evx in Star. rewrite Evx' in Star'.
+    apply (RG _ _ _ Star _ _ Star').
 Qed.
 
 Lemma ifc_store{T: Type}:
