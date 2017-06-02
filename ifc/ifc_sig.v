@@ -245,6 +245,13 @@ Axiom ifc_pre: forall Delta P1 P1' N1 N1' A1 A1' c P2 N2 A2,
   ifc_def T Delta P1' N1' A1' c P2 N2 A2 ->
   ifc_def T Delta P1  N1  A1  c P2 N2 A2.
 
+Axiom ifc_post: forall Delta P1 N1 A1 c P2 P2' N2 N2' A2 A2',
+  (forall x ek vl, ENTAIL (exit_tycon c Delta ek), P2' x ek vl |-- P2 x ek vl) ->
+  (forall x ek vl, ENTAIL (exit_tycon c Delta ek), P2' x ek vl |--
+    !! (lle (N2' x ek vl) (N2 x ek vl) /\ lle (A2' x ek vl) (A2 x ek vl))) ->
+  ifc_def T Delta P1 N1 A1 c P2' N2' A2' ->
+  ifc_def T Delta P1 N1 A1 c P2  N2  A2.
+
 Axiom ifc_set: forall Delta id P Q R (N: T -> stack_clsf) (A: T -> heap_clsf) (e2: expr) l2 t v,
   typeof_temp Delta id = Some t ->
   is_neutral_cast (implicit_deref (typeof e2)) t = true ->

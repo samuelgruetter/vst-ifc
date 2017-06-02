@@ -377,6 +377,25 @@ Definition irguard {A : Type}
          (exit_cont ek vl k )
          (exit_cont ek vl k').
 
+(* TODO Delta and c are not really related to the rest *)
+Lemma weaken_irguard{T : Type}: forall Delta (P1 P1': T -> ret_assert) N1 N1' A1 A1' k k' c,
+  (forall x ek vl, ENTAIL (exit_tycon c Delta ek), P1 x ek vl |-- P1' x ek vl) ->
+  (forall x ek vl, ENTAIL (exit_tycon c Delta ek), P1 x ek vl |--
+     !! (lle (N1 x ek vl) (N1' x ek vl) /\ lle (A1 x ek vl) (A1' x ek vl))) ->
+  irguard (lft1 VST_post_to_state_pred P1') N1' A1' k k' ->
+  irguard (lft1 VST_post_to_state_pred P1) N1 A1 k k'.
+Proof.
+  unfold irguard. introv Imp Le RG. intros ek vl. specialize (RG ek vl).
+  unfold lft1, VST_post_to_state_pred in *.
+  set (ek0 := ek).
+  destruct ek; simpl in *;
+  (eapply weaken_iguard with (P1'0 := (fun x => (P1' x ek0 vl)))
+                             (Delta0 := (exit_tycon c Delta ek0));
+    [ intros x rho; eapply (Imp x ek0 vl rho)
+    | intros x rho; simpl; eapply (Le x ek0 vl rho)
+    | eapply RG ]).
+Qed.
+
 Definition simple_ifc {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
@@ -878,7 +897,9 @@ Lemma ifc_return{T: Type}:
   forall Delta (R: T -> ret_assert) (N: T -> ret_stack_clsf) (A: T -> ret_heap_clsf)
         (retExpr: option expr) (retVal: option val),
 (* TODO this is an equality between two things of type "environ -> mpred", probably 
-not what we want *)
+not what we want.
+In particular, retVal cannot depend on (x : T) nor on the state, so we can only return
+constant values... *)
   (cast_expropt retExpr (ret_type Delta)) = `retVal ->
   ifc_def T Delta
           (fun (x: T) => tc_expropt Delta retExpr (ret_type Delta) &&
@@ -945,6 +966,24 @@ Proof.
     + exact E.
     + exact Imp.
     + apply Hi. apply RG.
+Qed.
+
+Lemma ifc_post{T: Type}: forall Delta P1 N1 A1 c P2 P2' N2 N2' A2 A2',
+  (forall x ek vl, ENTAIL (exit_tycon c Delta ek), P2' x ek vl |-- P2 x ek vl) ->
+  (forall x ek vl, ENTAIL (exit_tycon c Delta ek), P2' x ek vl |--
+    !! (lle (N2' x ek vl) (N2 x ek vl) /\ lle (A2' x ek vl) (A2 x ek vl))) ->
+  ifc_def T Delta P1 N1 A1 c P2' N2' A2' ->
+  ifc_def T Delta P1 N1 A1 c P2  N2  A2.
+Proof.
+  introv W Le H.
+  split_ifc_hyps. split.
+  - intro. apply canon.semax_post with (R' := P2' x); auto.
+  - unfold ifc_core, simple_ifc in *.
+    introv RG. apply Hi.
+    eapply weaken_irguard.
+    + exact W.
+    + exact Le.
+    + exact RG.
 Qed.
 
 Lemma clsf_expr_sound{T: Type}: 
