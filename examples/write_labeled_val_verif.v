@@ -99,6 +99,108 @@ Proof.
             by (extensionality; symmetry; apply sepcon_emp)
   end.
 
+  match goal with
+  | |- ifc_def _ _ (fun (x: ?T) => PROPx ?P (LOCALx ?Q (SEPx ?R))) _ _ _ _ _ _ =>
+       change (fun (x : T) => PROPx P (LOCALx Q (SEPx R)))
+         with (lft2 PROPx (fun (x : T) => P)
+               (lft2 LOCALx (fun (x: T) => Q)
+                (lft1 SEPx (fun (x: T) => R))))
+  end.
+
+  repeat (match goal with
+  | |- context [ fun (x: ?T) => ?f (@?h x) (@?t x) ] =>
+     assert (E: (fun (x: T) => f (h x) (t x)) = (lft2 f h t)) by reflexivity
+  end; simpl in E; rewrite E; clear E).
+
+  repeat match goal with
+  | |- context [ fun (x: ?T) => ?b ] => change (fun (x: T) => b) with (@lft0 T _ b)
+  end.
+
+  repeat match goal with
+  | |- context [ fun (x: ?T) => ?f x ] => change (fun (x: T) => f x) with f
+  end.
+
+  match goal with
+  | |- context [ fun (x: ?T) => ?f (@?h x) ] =>
+     assert (E: (fun (x: T) => f (h x)) = (lft1 f h)) by reflexivity
+  end. simpl in E. (* rewrite E. anomaly *) clear E.
+
+  change (
+ifc_def MyMetaVars Delta (lft2 PROPx
+       (lft2 cons
+          (lft2 or (lft2 eq b (lft0 Int.zero)) (lft2 eq b (lft0 Int.one)))
+          (lft0 []))
+       (lft2 LOCALx
+          (lft2 cons (lft2 temp (lft0 _v) (lft1 Vint (fun x : MyMetaVars => x.(v))))
+             (lft2 cons
+                (lft2 temp (lft0 _b) (lft1 Vint (fun x : MyMetaVars => x.(b))))
+                (lft2 cons (lft2 temp (lft0 _highptr) highptr)
+                   (lft2 cons (lft2 temp (lft0 _lowptr) lowptr) (lft0 [])))))
+          (lft1 SEPx
+             (lft2 cons (lft2 (data_at_ Ews) (lft0 tint) highptr)
+                (lft2 cons (lft2 (data_at_ Ews) (lft0 tint) lowptr) (lft0 []))))))
+(fun (x : MyMetaVars) (i : ident) =>
+   if i =? _v
+   then if Int.eq x.(b) Int.zero then Lo else Hi
+   else
+    if i =? _b
+    then Lo
+    else
+     if i =? _highptr
+     then Hi
+     else if i =? _lowptr then Lo else Hi)
+  (fun (x : MyMetaVars) (loc : heap_loc) =>
+   if heap_loc_eq_val loc x.(lowptr)
+   then Lo
+   else
+    if heap_loc_eq_val loc x.(highptr)
+    then Hi
+    else Hi)
+  (Ssequence
+     (Sifthenelse (Etempvar _b tbool)
+        (Sassign (Ederef (Etempvar _highptr (tptr tint)) tint)
+           (Etempvar _v tint))
+        (Sassign (Ederef (Etempvar _lowptr (tptr tint)) tint)
+           (Etempvar _v tint))) (Sreturn None))
+  (fun x : MyMetaVars =>
+   frame_ret_assert
+     (function_body_ret_assert tvoid
+        (PROP ( )
+         LOCAL ()
+         SEP (data_at Ews tint
+                (if Int.eq x.(b) Int.zero
+                 then Vundef
+                 else Vint x.(v)) x.(highptr);
+         data_at Ews tint
+           (if Int.eq x.(b) Int.zero
+            then Vint x.(v)
+            else Vundef) x.(lowptr))))
+     (LiftSepLog' mpred).(@emp (environ -> mpred) (LiftNatDed' mpred)))
+  (lft0 (lft0 (lft0 (lft0 Hi))))
+  (fun (x : MyMetaVars) (_ : exitkind) (_ : option val) (loc : heap_loc) =>
+   if heap_loc_eq_val loc x.(lowptr)
+   then Lo
+   else
+    if heap_loc_eq_val loc x.(highptr)
+    then Hi
+    else Hi)).
+
+  repeat match goal with
+  | |- context [ fun (x: ?T) => ?f x ] => change (fun (x: T) => f x) with f
+  end.
+
+Notation "'itemp' n v" := (lft2 temp (lft0 n) v) (at level 2).
+Notation "'iPROP' ( x ; .. ; y )   z" :=
+  (lft2 PROPx (lft2 cons x%type .. (lft2 cons y%type (lft0 nil)) ..) z) (at level 10).
+Notation " 'iLOCAL' ( x ; .. ; y )   z" :=
+  (lft2 LOCALx (lft2 cons x%type .. (lft2 cons y%type (lft0 nil)) ..) z)
+         (at level 9).
+Notation " 'iSEP' ( x ; .. ; y )" :=
+  (lft1 SEPx (lft2 cons x%logic .. (lft2 cons y%logic (lft0 nil)) ..))
+         (at level 8).
+
+  (* Look at goal here: It is in (iPROP ... iLOCAL ... iSEP ...) form *)
+
   evar (newN: MyMetaVars -> stack_clsf).
   eapply ifc_seq' with
     (P2 := fun x => (PROP (x.(b) = Int.zero \/ x.(b) = Int.one)
@@ -188,7 +290,8 @@ Proof.
   eapply ifc_pre; [ | | eapply ifc_return with (retVal := None) ].
   - intro. entailer!.
   - intro. apply prop_right. split.
-    + change (fun _ : ident => Hi) 
+    + unfold_lft.
+      progress change (fun _ : ident => Hi)
       with (@top (ident -> lattice.label) (@LiftLattice ident lattice.label LoHi)).
       apply lle_top.
     + apply lle_refl.

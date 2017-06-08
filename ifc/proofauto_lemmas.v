@@ -2,6 +2,7 @@ Require Import floyd.base.
 Require Import floyd.canon.
 Require Import floyd.client_lemmas.
 Require Import ifc.ifc_def.
+Require Import ifc.notation.
 Require Import lib.LibTactics.
 
 Local Open Scope logic.
