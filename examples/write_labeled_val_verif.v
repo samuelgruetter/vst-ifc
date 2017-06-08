@@ -1,5 +1,6 @@
 Require Import ifc.simple_vst_store_lemmas.
 Require Import ifc.proofauto.
+Require Import ifc.canon_lift_notation.
 Require Import examples.write_labeled_val.
 
 Instance CompSpecs : compspecs. make_compspecs prog. Defined.
@@ -188,16 +189,6 @@ ifc_def MyMetaVars Delta (lft2 PROPx
   repeat match goal with
   | |- context [ fun (x: ?T) => ?f x ] => change (fun (x: T) => f x) with f
   end.
-
-Notation "'itemp' n v" := (lft2 temp (lft0 n) v) (at level 2).
-Notation "'iPROP' ( x ; .. ; y )   z" :=
-  (lft2 PROPx (lft2 cons x%type .. (lft2 cons y%type (lft0 nil)) ..) z) (at level 10).
-Notation " 'iLOCAL' ( x ; .. ; y )   z" :=
-  (lft2 LOCALx (lft2 cons x%type .. (lft2 cons y%type (lft0 nil)) ..) z)
-         (at level 9).
-Notation " 'iSEP' ( x ; .. ; y )" :=
-  (lft1 SEPx (lft2 cons x%logic .. (lft2 cons y%logic (lft0 nil)) ..))
-         (at level 8).
 
   (* Look at goal here: It is in (iPROP ... iLOCAL ... iSEP ...) form *)
 
