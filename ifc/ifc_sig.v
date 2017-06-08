@@ -100,6 +100,8 @@ Definition lft4 {T} {A1 A2 A3 A4 B} (f: A1 -> A2 -> A3 -> A4 -> B)
      (a1: T -> A1) (a2: T -> A2) (a3: T -> A3)(a4: T -> A4):  T -> B :=
      fun x => f (a1 x) (a2 x) (a3 x) (a4 x).
 
+Ltac unfold_lft := repeat unfold lft0, lft1, lft2, lft3, lft4.
+
 Definition overridePostClsf{A C: Type}(Q: A -> C)(R: A -> exitkind -> option val -> C)
 : A -> exitkind -> option val -> C
 := fun (x: A) (ek: exitkind) (vl: option val) => if eq_dec ek EK_normal then Q x else R x ek vl.
