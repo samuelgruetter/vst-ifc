@@ -1,14 +1,13 @@
-Require Import ifc.clight_semantics.
 Require Export ifc.ifc_sig.
 Require Import ifc.simple_vst_store_lemmas.
-Require Import veric.Clight_new.
-Require Import veric.semax_lemmas.
 Require Import sepcomp.closed_safety.
+Require Import veric.Clight_new.
 Require Import veric.semax.
+Require Import veric.semax_lemmas.
+Require Export veric.expr.
 Require Import floyd.base.
 Require Import floyd.reptype_lemmas.
 Require Import floyd.field_at.
-Require Import ifc.vst_ifthenelse.
 Require Import floyd.client_lemmas.
 Require Import floyd.sc_set_load_store.
 Require Import floyd.nested_field_lemmas.
@@ -16,14 +15,6 @@ Require Import floyd.proj_reptype_lemmas.
 Require Import List. Import ListNotations.
 
 Local Open Scope logic.
-
-(* TODO connect this to the actual VST soundness proof *)
-Axiom VST_sound: forall {Espec: OracleKind} {CS: compspecs} Delta P1 c P2 ek vl k,
-  semax Delta P1 c P2 ->
-  forall ge e1 te1 m1 e2 te2 m2,
-  VST_to_state_pred P1 e1 te1 m1 ->
-  star ge (State e1 te1 (cons (Kseq c) k)) m1 (State e2 te2 (exit_cont ek vl k)) m2 ->
-  VST_to_state_pred (P2 ek vl) e2 te2 m2.
 
 Module IFC : IFC_SIG.
 
@@ -407,6 +398,7 @@ Definition simple_ifc {A : Type} (Delta: tycontext)
      irguard postP postN postA k k' ->
      iguard preP preN preA (Kseq c :: k) (Kseq c :: k').
 
+(*
 Definition simple_ifc_old {A : Type} (Delta: tycontext)
   (preP: A -> state_pred) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
   (c: statement)
@@ -432,6 +424,7 @@ Definition simple_ifc_old {A : Type} (Delta: tycontext)
 (* TODO How could we say anything about intermediate states?
    postN and postA are only applicable to the state reached after executing all of c!
    And if we allow n to be anything, it could also be too big, so that we run into k! *)
+*)
 
 Definition ifc_core {A: Type} (Delta: tycontext)
   (preP: A -> pre_assert) (preN: A -> stack_clsf) (preA: A -> heap_clsf)
